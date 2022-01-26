@@ -1,7 +1,9 @@
 #pragma once
 
 #include <fstream>
+#include <cstdint>
 #include <exception>
+#include <vector>
 
 namespace pngimp
 {
@@ -56,6 +58,17 @@ namespace pngimp
 		}
 	};
 
+	struct PNG_IHDR
+	{
+		uint32_t width;
+		uint32_t height;
+		char bit_depth;
+		char color_type;
+		char compression;
+		char filter;
+		char interlace;
+	};
+
 	bool equal(const PNG_8byte &a, const PNG_8byte &b)
 	{
 		bool eq = true;
@@ -88,10 +101,10 @@ namespace pngimp
 
 	unsigned int toUint(const PNG_4byte& a)
 	{
-		unsigned int b0 = (unsigned int)a.bytes[3];
-		unsigned int b1 = ((unsigned int)a.bytes[2] << 8);
-		unsigned int b2 = ((unsigned int)a.bytes[1] << 16);
-		unsigned int b3 = ((unsigned int)a.bytes[0] << 24);
+		unsigned int b0 = (unsigned int)(unsigned char)(a.bytes[3]);
+		unsigned int b1 = ((unsigned int)(unsigned char)a.bytes[2] << 8);
+		unsigned int b2 = ((unsigned int)(unsigned char)a.bytes[1] << 16);
+		unsigned int b3 = ((unsigned int)(unsigned char)a.bytes[0] << 24);
 
 		return b0 | b1 | b2 | b3;
 	}
@@ -142,18 +155,110 @@ pngimp::BufferStruct pngimp::import(const char* path)
 		throw std::exception("");
 	}
 
-	PNG_4byte chunk_size_raw;
-	if (!infile.read(chunk_size_raw.bytes, 4))
-	{
-		throw std::exception("");
-	}
+	PNG_IHDR ihdr;
+	std::vector<char> compressed_data;
 
-	unsigned int chunk_size = toUint(chunk_size_raw);
-
-	PNG_4byte chunk_name_raw;
-	if (!infile.read(chunk_name_raw.bytes, 4))
+	bool done = false;
+	while (!done)
 	{
-		throw std::exception("");
+		PNG_4byte chunk_size_raw;
+		if (!infile.read(chunk_size_raw.bytes, 4))
+		{
+			throw std::exception("");
+		}
+
+		PNG_4byte chunk_name_raw;
+		if (!infile.read(chunk_name_raw.bytes, 4))
+		{
+			int p = infile.tellg();
+			throw std::exception("");
+		}
+
+		if (equal(chunk_name_raw, PNG_4byte('I', 'H', 'D', 'R')))
+		{
+			if (!(toUint(chunk_size_raw) == 13))
+			{
+				throw std::exception("");
+			}
+			else
+			{
+				PNG_4byte IHDR_width_raw;
+				if (!infile.read(IHDR_width_raw.bytes, 4))
+				{
+					throw std::exception("");
+				}
+				ihdr.width = toUint(IHDR_width_raw);
+				
+				PNG_4byte IHDR_height_raw;
+				if (!infile.read(IHDR_height_raw.bytes, 4))
+				{
+					throw std::exception("");
+				}
+				ihdr.height = toUint(IHDR_height_raw);
+
+				if (!infile.read(&ihdr.bit_depth, 1))
+				{
+					throw std::exception("");
+				}
+
+				if (!infile.read(&ihdr.color_type, 1))
+				{
+					throw std::exception("");
+				}
+				
+				if (!infile.read(&ihdr.compression, 1))
+				{
+					throw std::exception("");
+				}
+
+				if (!infile.read(&ihdr.filter, 1))
+				{
+					throw std::exception("");
+				}
+
+				if (!infile.read(&ihdr.interlace, 1))
+				{
+					throw std::exception("");
+				}
+			}
+		}
+		else if (equal(chunk_name_raw, PNG_4byte('I', 'D', 'A', 'T')))
+		{
+			char c;
+			unsigned int len = toUint(chunk_size_raw);
+			for (unsigned int i = 0; i < len; ++i)
+			{
+				if (!infile.read(&c, 1))
+				{
+					throw std::exception("");
+				}
+
+				compressed_data.push_back(c);
+			}
+		}
+		else if (equal(chunk_name_raw, PNG_4byte('I', 'E', 'N', 'D')))
+		{
+			done = true;
+		}
+		else
+		{
+			char c;
+			unsigned int len = toUint(chunk_size_raw);
+			for (unsigned int i = 0; i < len; ++i)
+			{
+				if (!infile.read(&c, 1))
+				{
+					throw std::exception("");
+				}
+			}
+		}
+
+		// Discard CRC for now
+		PNG_4byte crc;
+		if (!infile.read(crc.bytes, 4))
+		{
+			throw std::exception("");
+		}
 	}
 
 	return BufferStruct(0, 0, 0);
