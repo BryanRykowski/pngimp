@@ -1,0 +1,13 @@
+.vs
+.vscode
+[Bb]uild
+[Rr]elease
+[Dd]ebug
+
+*.obj
+*.o
+*.lib
+*.a
+*.dll
+*.so
+*.exe
