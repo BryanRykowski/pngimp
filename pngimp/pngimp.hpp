@@ -60,8 +60,8 @@ namespace pngimp
 
 	struct PNG_IHDR
 	{
-		uint32_t width;
-		uint32_t height;
+		unsigned int width;
+		unsigned int height;
 		char bit_depth;
 		char color_type;
 		char compression;
@@ -108,6 +108,17 @@ namespace pngimp
 
 		return b0 | b1 | b2 | b3;
 	}
+
+	class FileBuffer
+	{
+	public:
+		unsigned int pos = 0;
+		std::vector<char> bytes;
+		FileBuffer(){};
+		bool read4Bytes(PNG_4byte& out);
+		bool read8Bytes(PNG_8byte& out);
+		bool readChar(char& out);
+	};
 }
 
 pngimp::BufferStruct::BufferStruct(const char* data, const int width, const int height)
@@ -137,18 +148,72 @@ const int pngimp::BufferStruct::height()
 	return _height;
 }
 
+bool pngimp::FileBuffer::read4Bytes(PNG_4byte& out)
+{
+	for (unsigned int i = 0; i < 4; ++i)
+	{
+		if (pos < bytes.size())
+		{
+			out.bytes[i] = bytes[pos];
+			++pos;
+		}
+		else
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
+bool pngimp::FileBuffer::read8Bytes(PNG_8byte& out)
+{
+	for (unsigned int i = 0; i < 8; ++i)
+	{
+		if (pos < bytes.size())
+		{
+			out.bytes[i] = bytes[pos];
+			++pos;
+		}
+		else
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
+bool pngimp::FileBuffer::readChar(char& out)
+{
+	if (pos < bytes.size())
+	{
+		out = bytes[pos];
+		++pos;
+		return true;
+	}
+	else
+	{
+		return false;
+	}
+}
+
 pngimp::BufferStruct pngimp::import(const char* path)
 {
-	std::ifstream infile;
-	infile >> std::noskipws;
-	infile.open(path, std::ios::in | std::ios::binary);
+	FileBuffer file;
+
+	{
+		std::ifstream ifs(path, std::ios::in | std::ios::binary);
+		char c;
+		while (ifs.read(&c, 1))
+		{
+			file.bytes.push_back(c);
+		}
+	}
 
 	// Validate signature
 	PNG_8byte sig;
-	if (!infile.read(sig.bytes, 8))
-	{
-		throw std::exception("");
-	}
+	file.read8Bytes(sig);
 
 	if (!equal(sig, PNG_8byte(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)))
 	{
@@ -156,109 +221,73 @@ pngimp::BufferStruct pngimp::import(const char* path)
 	}
 
 	PNG_IHDR ihdr;
+	std::vector<char> chunk_data;
 	std::vector<char> compressed_data;
+	std::vector<char> filtered_data;
+	std::vector<char> final_data;
 
 	bool done = false;
 	while (!done)
 	{
 		PNG_4byte chunk_size_raw;
-		if (!infile.read(chunk_size_raw.bytes, 4))
+		if (!file.read4Bytes(chunk_size_raw))
 		{
 			throw std::exception("");
 		}
 
+		unsigned int chunk_size = toUint(chunk_size_raw);
+
 		PNG_4byte chunk_name_raw;
-		if (!infile.read(chunk_name_raw.bytes, 4))
+		if (!file.read4Bytes(chunk_name_raw))
 		{
-			int p = infile.tellg();
+			throw std::exception("");
+		}
+
+		for (int i = 0; i < chunk_size; ++i)
+		{
+			char c;
+			if (!file.readChar(c))
+			{
+				throw std::exception("");
+			}
+			chunk_data.push_back(c);
+		}
+
+		// Discard CRC for now
+		PNG_4byte crc;
+		if (!file.read4Bytes(crc))
+		{
 			throw std::exception("");
 		}
 
 		if (equal(chunk_name_raw, PNG_4byte('I', 'H', 'D', 'R')))
 		{
-			if (!(toUint(chunk_size_raw) == 13))
+			if (chunk_size != 13)
 			{
 				throw std::exception("");
 			}
-			else
-			{
-				PNG_4byte IHDR_width_raw;
-				if (!infile.read(IHDR_width_raw.bytes, 4))
-				{
-					throw std::exception("");
-				}
-				ihdr.width = toUint(IHDR_width_raw);
-				
-				PNG_4byte IHDR_height_raw;
-				if (!infile.read(IHDR_height_raw.bytes, 4))
-				{
-					throw std::exception("");
-				}
-				ihdr.height = toUint(IHDR_height_raw);
 
-				if (!infile.read(&ihdr.bit_depth, 1))
-				{
-					throw std::exception("");
-				}
-
-				if (!infile.read(&ihdr.color_type, 1))
-				{
-					throw std::exception("");
-				}
-				
-				if (!infile.read(&ihdr.compression, 1))
-				{
-					throw std::exception("");
-				}
-
-				if (!infile.read(&ihdr.filter, 1))
-				{
-					throw std::exception("");
-				}
-
-				if (!infile.read(&ihdr.interlace, 1))
-				{
-					throw std::exception("");
-				}
-			}
+			ihdr.width = toUint(PNG_4byte(chunk_data[0], chunk_data[1], chunk_data[2], chunk_data[3]));
+			ihdr.height = toUint(PNG_4byte(chunk_data[4], chunk_data[5], chunk_data[6], chunk_data[7]));
+			ihdr.bit_depth = chunk_data[8];
+			ihdr.color_type = chunk_data[9];
+			ihdr.compression = chunk_data[10];
+			ihdr.filter = chunk_data[11];
+			ihdr.interlace = chunk_data[12];
 		}
 		else if (equal(chunk_name_raw, PNG_4byte('I', 'D', 'A', 'T')))
 		{
-			char c;
-			unsigned int len = toUint(chunk_size_raw);
-			for (unsigned int i = 0; i < len; ++i)
+			for (int i = 0; i < chunk_data.size(); ++i)
 			{
-				if (!infile.read(&c, 1))
-				{
-					throw std::exception("");
-				}
-
-				compressed_data.push_back(c);
+				compressed_data.push_back(chunk_data[i]);
 			}
 		}
 		else if (equal(chunk_name_raw, PNG_4byte('I', 'E', 'N', 'D')))
 		{
 			done = true;
 		}
-		else
-		{
-			char c;
-			unsigned int len = toUint(chunk_size_raw);
-			for (unsigned int i = 0; i < len; ++i)
-			{
-				if (!infile.read(&c, 1))
-				{
-					throw std::exception("");
-				}
-			}
-		}
 
-		// Discard CRC for now
-		PNG_4byte crc;
-		if (!infile.read(crc.bytes, 4))
-		{
-			throw std::exception("");
-		}
+		chunk_data.clear();
 	}
 
 	return BufferStruct(0, 0, 0);
