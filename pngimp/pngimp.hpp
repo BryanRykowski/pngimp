@@ -236,6 +236,7 @@ pngimp::BufferStruct pngimp::import(const char* path)
 		}
 
 		unsigned int chunk_size = toUint(chunk_size_raw);
+		chunk_data.reserve(chunk_size);
 
 		PNG_4byte chunk_name_raw;
 		if (!file.read4Bytes(chunk_name_raw))
