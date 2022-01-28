@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <exception>
 #include <vector>
+#include <array>
 
 namespace pngimp
 {
@@ -119,6 +120,11 @@ namespace pngimp
 		bool read8Bytes(PNG_8byte& out);
 		bool readChar(char& out);
 	};
+
+	void deflate(std::vector<char>& compressed_data, std::vector<char>& filtered_data)
+	{
+
+	}
 }
 
 pngimp::BufferStruct::BufferStruct(const char* data, const int width, const int height)
@@ -201,13 +207,28 @@ bool pngimp::FileBuffer::readChar(char& out)
 pngimp::BufferStruct pngimp::import(const char* path)
 {
 	FileBuffer file;
-
+		
 	{
+		constexpr int buffSize = 1024 * 4;
+		std::array<char, buffSize> buff;
+		
 		std::ifstream ifs(path, std::ios::in | std::ios::binary);
-		char c;
-		while (ifs.read(&c, 1))
+		
+		bool done = false;
+		while (!done)
 		{
-			file.bytes.push_back(c);
+			if (ifs.read(buff.data(), buffSize))
+			{
+				file.bytes.insert(file.bytes.end(), buff.data(), buff.data() + buffSize);
+			}
+			else
+			{
+				if (ifs.gcount() > 0)
+				{
+					file.bytes.insert(file.bytes.end(), buff.data(), buff.data() + ifs.gcount());
+				}
+				done = true;
+			}
 		}
 	}
 
@@ -278,10 +299,7 @@ pngimp::BufferStruct pngimp::import(const char* path)
 		}
 		else if (equal(chunk_name_raw, PNG_4byte('I', 'D', 'A', 'T')))
 		{
-			for (int i = 0; i < chunk_data.size(); ++i)
-			{
-				compressed_data.push_back(chunk_data[i]);
-			}
+			compressed_data.insert(compressed_data.end(), chunk_data.begin(), chunk_data.end());
 		}
 		else if (equal(chunk_name_raw, PNG_4byte('I', 'E', 'N', 'D')))
 		{
