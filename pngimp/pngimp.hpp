@@ -133,12 +133,12 @@ namespace pngimp
 
 	unsigned int toUint(const PNG_4byte& a)
 	{
-		unsigned int b0 = (unsigned int)(unsigned char)(a.bytes[3]);
-		unsigned int b1 = ((unsigned int)(unsigned char)a.bytes[2] << 8);
-		unsigned int b2 = ((unsigned int)(unsigned char)a.bytes[1] << 16);
-		unsigned int b3 = ((unsigned int)(unsigned char)a.bytes[0] << 24);
+		unsigned int b = (unsigned int)(unsigned char)(a.bytes[3]);
+		b |= ((unsigned int)(unsigned char)a.bytes[2] << 8);
+		b |= ((unsigned int)(unsigned char)a.bytes[1] << 16);
+		b |= ((unsigned int)(unsigned char)a.bytes[0] << 24);
 
-		return b0 | b1 | b2 | b3;
+		return b;
 	}
 }
 
