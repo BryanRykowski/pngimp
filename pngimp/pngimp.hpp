@@ -22,7 +22,37 @@ namespace pngimp
 		const int width();
 		const int height();
 	};
-	
+}
+
+pngimp::BufferStruct::BufferStruct(const char* data, const int width, const int height)
+{
+	_data = data;
+	_width = width;
+	_height = height;
+}
+
+pngimp::BufferStruct::~BufferStruct()
+{
+	delete[] _data;
+}
+
+const char* pngimp::BufferStruct::data()
+{
+	return _data;
+}
+
+const int pngimp::BufferStruct::width()
+{
+	return _width;
+}
+
+const int pngimp::BufferStruct::height()
+{
+	return _height;
+}
+
+namespace pngimp
+{
 	BufferStruct import(const char* path);
 }
 
@@ -32,7 +62,7 @@ namespace pngimp
 {
 	struct PNG_8byte
 	{
-		char bytes[8] = {0};
+		char bytes[8] = { 0 };
 		PNG_8byte() {};
 		PNG_8byte(char b0, char b1, char b2, char b3, char b4, char b5, char b6, char b7)
 		{
@@ -49,7 +79,7 @@ namespace pngimp
 
 	struct PNG_4byte
 	{
-		char bytes[4] = {0};
+		char bytes[4] = { 0 };
 		PNG_4byte() {};
 		PNG_4byte(char b0, char b1, char b2, char b3)
 		{
@@ -110,7 +140,10 @@ namespace pngimp
 
 		return b0 | b1 | b2 | b3;
 	}
+}
 
+namespace pngimp
+{
 	class FileBuffer
 	{
 	public:
@@ -121,33 +154,6 @@ namespace pngimp
 		bool read8Bytes(PNG_8byte& out);
 		bool readChar(char& out);
 	};
-}
-
-pngimp::BufferStruct::BufferStruct(const char* data, const int width, const int height)
-{
-	_data = data;
-	_width = width;
-	_height = height;
-}
-
-pngimp::BufferStruct::~BufferStruct()
-{
-	delete[] _data;
-}
-
-const char* pngimp::BufferStruct::data()
-{
-	return _data;
-}
-
-const int pngimp::BufferStruct::width()
-{
-	return _width;
-}
-
-const int pngimp::BufferStruct::height()
-{
-	return _height;
 }
 
 bool pngimp::FileBuffer::read4Bytes(PNG_4byte& out)
@@ -200,6 +206,24 @@ bool pngimp::FileBuffer::readChar(char& out)
 	}
 }
 
+namespace pngimp
+{
+	void deinterlace(PNG_IHDR& ihdr, std::vector<char>& interlaced_data, std::vector<char>& final_data)
+	{
+
+	}
+	
+	void unfilter( PNG_IHDR& ihdr,std::vector<char>& filtered_data, std::vector<char>& interlaced_data)
+	{
+
+	}
+	
+	void inflate(std::vector<char>& compressed_data, std::vector<char>& filtered_data)
+	{
+
+	}
+}
+
 pngimp::BufferStruct pngimp::import(const char* path)
 {
 	FileBuffer file;
@@ -238,9 +262,8 @@ pngimp::BufferStruct pngimp::import(const char* path)
 	}
 
 	PNG_IHDR ihdr;
-	std::vector<char> compressed_data;
-	std::vector<char> filtered_data;
-	std::vector<char> final_data;
+	std::vector<char> buffer0;
+	std::vector<char> buffer1;
 	int chunk_count = 0;
 	int IDAT_count = 0;
 
@@ -281,7 +304,7 @@ pngimp::BufferStruct pngimp::import(const char* path)
 		}
 		else if (equal(chunk_name_raw, PNG_4byte('I', 'D', 'A', 'T')))
 		{
-			std::copy(file.bytes.begin() + file.pos, file.bytes.begin() + file.pos + chunk_size, std::back_inserter(compressed_data));
+			std::copy(file.bytes.begin() + file.pos, file.bytes.begin() + file.pos + chunk_size, std::back_inserter(buffer0));
 			file.pos += chunk_size;
 			++IDAT_count;
 		}
@@ -306,6 +329,18 @@ pngimp::BufferStruct pngimp::import(const char* path)
 
 	file.bytes.clear();
 	file.bytes.shrink_to_fit();
+
+	inflate(buffer0, buffer1);
+
+	buffer0.clear();
+
+	unfilter(ihdr, buffer1, buffer0);
+
+	buffer1.clear();
+
+	deinterlace(ihdr, buffer0, buffer1);
+
+	buffer0.clear();
 
 	return BufferStruct(0, 0, 0);
 }
