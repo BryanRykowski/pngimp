@@ -318,6 +318,18 @@ pngimp::BufferStruct pngimp::import(const char* path)
 			ihdr.compression = temp_data[10];
 			ihdr.filter = temp_data[11];
 			ihdr.interlace = temp_data[12];
+
+			// Verify image is compatible. Only 8 bits per sample RGB or RGBA.
+			if (
+				ihdr.bit_depth != 8 ||
+				!(ihdr.color_type == 2 || ihdr.color_type == 6) ||
+				ihdr.compression != 0 ||
+				ihdr.filter != 0 ||
+				!(ihdr.interlace == 0 || ihdr.interlace == 1)
+				)
+			{
+				throw std::exception("");
+			}
 		}
 		else if (equal(chunk_name_raw, PNG_4byte('I', 'D', 'A', 'T')))
 		{
