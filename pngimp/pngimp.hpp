@@ -9,36 +9,58 @@
 
 namespace pngimp
 {
+	struct PNG_IHDR
+	{
+		unsigned int width;
+		unsigned int height;
+		char bit_depth;
+		char color_type;
+		char compression;
+		char filter;
+		char interlace;
+	};
+
+	enum BufferFormat : char
+	{
+		RGB8 = 0,
+		RGBA8
+	};
+	
 	class BufferStruct
 	{
 	private:
-		const char* _data;
+		std::vector<char> _data;
 		int _width;
 		int _height;
+		BufferFormat _format;
 	public:
-		BufferStruct(const char* data, const int width, const int height);
-		~BufferStruct();
+		BufferStruct(PNG_IHDR& ihdr, std::vector<char>& data);
 		const char* data();
 		const int width();
 		const int height();
+		BufferFormat format();
 	};
 }
 
-pngimp::BufferStruct::BufferStruct(const char* data, const int width, const int height)
+pngimp::BufferStruct::BufferStruct(PNG_IHDR& ihdr, std::vector<char>& data)
 {
-	_data = data;
-	_width = width;
-	_height = height;
-}
+	std::copy(data.begin(), data.end(), std::back_inserter(_data));
+	_width = ihdr.width;
+	_height = ihdr.height;
 
-pngimp::BufferStruct::~BufferStruct()
-{
-	delete[] _data;
+	if (ihdr.color_type == 2)
+	{
+		_format = BufferFormat::RGB8;
+	}
+	else
+	{
+		_format = BufferFormat::RGBA8;
+	}
 }
 
 const char* pngimp::BufferStruct::data()
 {
-	return _data;
+	return _data.data();
 }
 
 const int pngimp::BufferStruct::width()
@@ -49,6 +71,10 @@ const int pngimp::BufferStruct::width()
 const int pngimp::BufferStruct::height()
 {
 	return _height;
+}
+pngimp::BufferFormat pngimp::BufferStruct::format()
+{
+	return _format;
 }
 
 namespace pngimp
@@ -90,16 +116,7 @@ namespace pngimp
 		}
 	};
 
-	struct PNG_IHDR
-	{
-		unsigned int width;
-		unsigned int height;
-		char bit_depth;
-		char color_type;
-		char compression;
-		char filter;
-		char interlace;
-	};
+	
 
 	bool equal(const PNG_8byte &a, const PNG_8byte &b)
 	{
@@ -336,12 +353,15 @@ pngimp::BufferStruct pngimp::import(const char* path)
 
 	unfilter(ihdr, buffer1, buffer0);
 
-	buffer1.clear();
+	std::vector<char>& outBuffer = buffer0;
+	
+	if (ihdr.interlace == 1)
+	{
+		buffer1.clear();
+		deinterlace(ihdr, buffer0, buffer1);
+		outBuffer = buffer1;
+	}
 
-	deinterlace(ihdr, buffer0, buffer1);
-
-	buffer0.clear();
-
-	return BufferStruct(0, 0, 0);
+	return BufferStruct(ihdr, outBuffer);
 }
 #endif
