@@ -235,9 +235,57 @@ namespace pngimp
 
 	}
 	
-	void inflate(std::vector<char>& compressed_data, std::vector<char>& filtered_data)
+	void inflate(PNG_IHDR& ihdr,const std::vector<char>& in, std::vector<char>& out)
 	{
+		size_t width = static_cast<size_t>(ihdr.width) + 1;
+		size_t height = static_cast<size_t>(ihdr.height);
+		if (ihdr.color_type == 2)
+		{
+			out.reserve(width * height * 3);
+		}
+		else
+		{
+			out.reserve(width * height * 4);
+		}
 
+		struct
+		{
+			unsigned char cm;
+			unsigned char cinfo;
+			bool fdict;
+		}zhdr;
+		
+		zhdr.cm = (unsigned char)in[0] & 0x0f;
+		zhdr.cinfo = (unsigned char)in[0] >> 4;
+
+		zhdr.fdict = ((unsigned char)in[1] & 0b00100000) >> 5;
+
+		unsigned short fcheck_verify = (unsigned short)(unsigned char)in[0] << 8 | (unsigned short)(unsigned char)in[1];
+
+		if (
+			fcheck_verify % 31 != 0 ||
+			zhdr.cm != 8 ||
+			zhdr.cinfo > 7
+			)
+		{
+			throw std::exception("");
+		}
+
+		size_t in_pos;
+		
+		if (zhdr.fdict)
+		{
+			in_pos = 6;
+		}
+		else
+		{
+			in_pos = 2;
+		}
+
+		while (in_pos < in.size())
+		{
+			++in_pos;
+		}
 	}
 }
 
@@ -359,7 +407,7 @@ pngimp::BufferStruct pngimp::import(const char* path)
 	file.bytes.clear();
 	file.bytes.shrink_to_fit();
 
-	inflate(buffer0, buffer1);
+	inflate(ihdr, buffer0, buffer1);
 
 	buffer0.clear();
 
