@@ -273,7 +273,7 @@ pngimp::BufferStruct pngimp::import(const char* path)
 	PNG_8byte sig;
 	file.read8Bytes(sig);
 
-	if (!equal(sig, PNG_8byte(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)))
+	if (!equal(sig, PNG_8byte(-119, 80, 78, 71, 13, 10, 26, 10)))
 	{
 		throw std::exception("");
 	}
