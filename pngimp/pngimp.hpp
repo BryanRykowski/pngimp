@@ -13,11 +13,11 @@ namespace pngimp
 	{
 		unsigned int width;
 		unsigned int height;
-		char bit_depth;
-		char color_type;
-		char compression;
-		char filter;
-		char interlace;
+		unsigned char bit_depth;
+		unsigned char color_type;
+		unsigned char compression;
+		unsigned char filter;
+		unsigned char interlace;
 	};
 
 	enum BufferFormat : char
@@ -29,20 +29,20 @@ namespace pngimp
 	class BufferStruct
 	{
 	private:
-		std::vector<char> _data;
+		std::vector<unsigned char> _data;
 		int _width;
 		int _height;
 		BufferFormat _format;
 	public:
-		BufferStruct(PNG_IHDR& ihdr, std::vector<char>& data);
-		const char* data();
+		BufferStruct(PNG_IHDR& ihdr, std::vector<unsigned char>& data);
+		const unsigned char* data();
 		const int width();
 		const int height();
 		BufferFormat format();
 	};
 }
 
-pngimp::BufferStruct::BufferStruct(PNG_IHDR& ihdr, std::vector<char>& data)
+pngimp::BufferStruct::BufferStruct(PNG_IHDR& ihdr, std::vector<unsigned char>& data)
 {
 	std::copy(data.begin(), data.end(), std::back_inserter(_data));
 	_width = ihdr.width;
@@ -58,7 +58,7 @@ pngimp::BufferStruct::BufferStruct(PNG_IHDR& ihdr, std::vector<char>& data)
 	}
 }
 
-const char* pngimp::BufferStruct::data()
+const unsigned char* pngimp::BufferStruct::data()
 {
 	return _data.data();
 }
@@ -86,45 +86,16 @@ namespace pngimp
 
 namespace pngimp
 {
-	struct PNG_8byte
-	{
-		char bytes[8] = { 0 };
-		PNG_8byte() {};
-		PNG_8byte(char b0, char b1, char b2, char b3, char b4, char b5, char b6, char b7)
-		{
-			bytes[0] = b0;
-			bytes[1] = b1;
-			bytes[2] = b2;
-			bytes[3] = b3;
-			bytes[4] = b4;
-			bytes[5] = b5;
-			bytes[6] = b6;
-			bytes[7] = b7;
-		}
-	};
+	typedef std::array<unsigned char, 4> ChunkName;
+	typedef std::array<unsigned char, 8> Signature;
 
-	struct PNG_4byte
-	{
-		char bytes[4] = { 0 };
-		PNG_4byte() {};
-		PNG_4byte(char b0, char b1, char b2, char b3)
-		{
-			bytes[0] = b0;
-			bytes[1] = b1;
-			bytes[2] = b2;
-			bytes[3] = b3;
-		}
-	};
-
-	
-
-	bool equal(const PNG_8byte &a, const PNG_8byte &b)
+	bool equal(const Signature& a, const Signature& b)
 	{
 		bool eq = true;
 
 		for (char i = 0; i < 8; i++)
 		{
-			if (a.bytes[i] != b.bytes[i])
+			if (a[i] != b[i])
 			{
 				eq = false;
 			}
@@ -133,13 +104,13 @@ namespace pngimp
 		return eq;
 	}
 
-	bool equal(const PNG_4byte& a, const PNG_4byte& b)
+	bool equal(const ChunkName& a, const ChunkName& b)
 	{
 		bool eq = true;
 
 		for (char i = 0; i < 4; i++)
 		{
-			if (a.bytes[i] != b.bytes[i])
+			if (a[i] != b[i])
 			{
 				eq = false;
 			}
@@ -147,74 +118,40 @@ namespace pngimp
 
 		return eq;
 	}
-
-	unsigned int toUint(const PNG_4byte& a)
-	{
-		unsigned int b = (unsigned int)(unsigned char)(a.bytes[3]);
-		b |= ((unsigned int)(unsigned char)a.bytes[2] << 8);
-		b |= ((unsigned int)(unsigned char)a.bytes[1] << 16);
-		b |= ((unsigned int)(unsigned char)a.bytes[0] << 24);
-
-		return b;
-	}
 }
 
 namespace pngimp
 {
-	class FileBuffer
+	constexpr size_t FileReaderBuffSize = 1024 * 4;
+	
+	class FileReader
 	{
+	private:
+		std::unique_ptr<std::array<unsigned char, FileReaderBuffSize>> buffer;
+		std::ifstream stream;
 	public:
-		unsigned int pos = 0;
-		std::vector<char> bytes;
-		FileBuffer(){};
-		bool read4Bytes(PNG_4byte& out);
-		bool read8Bytes(PNG_8byte& out);
-		bool readChar(char& out);
+		FileReader(const char* path);
+		bool readUchar(unsigned char& out);
+		bool readUint(unsigned int& out);
+		bool readChunkName(ChunkName& out);
+		bool readSignature(Signature& out);
+		bool readNbytes(std::vector<unsigned char>& destination, size_t count);
+		bool skipNbytes(size_t count);
 	};
 }
 
-bool pngimp::FileBuffer::read4Bytes(PNG_4byte& out)
+pngimp::FileReader::FileReader(const char* path)
 {
-	for (unsigned int i = 0; i < 4; ++i)
-	{
-		if (pos < bytes.size())
-		{
-			out.bytes[i] = bytes[pos];
-			++pos;
-		}
-		else
-		{
-			return false;
-		}
-	}
-
-	return true;
+	buffer = std::make_unique<std::array<unsigned char, FileReaderBuffSize>>();
+	stream.open(path, std::ios::in | std::ios::binary);
 }
 
-bool pngimp::FileBuffer::read8Bytes(PNG_8byte& out)
+bool pngimp::FileReader::readUchar(unsigned char& out)
 {
-	for (unsigned int i = 0; i < 8; ++i)
+	char c;
+	if (stream.read(&c, 1))
 	{
-		if (pos < bytes.size())
-		{
-			out.bytes[i] = bytes[pos];
-			++pos;
-		}
-		else
-		{
-			return false;
-		}
-	}
-
-	return true;
-}
-
-bool pngimp::FileBuffer::readChar(char& out)
-{
-	if (pos < bytes.size())
-	{
-		out = bytes[pos];
-		++pos;
+		out = (unsigned char)c;
 		return true;
 	}
 	else
@@ -223,19 +160,115 @@ bool pngimp::FileBuffer::readChar(char& out)
 	}
 }
 
+bool pngimp::FileReader::readUint(unsigned int& out)
+{
+	char i[4];
+	if (stream.read(i, 4))
+	{
+		out = (unsigned int)(unsigned char)i[0] << 24 | (unsigned int)(unsigned char)i[1] << 16 | (unsigned int)(unsigned char)i[2] << 8 | (unsigned int)(unsigned char)i[3];
+		return true;
+	}
+	else
+	{
+		return false;
+	}
+}
+
+bool pngimp::FileReader::readChunkName(ChunkName& out)
+{
+	if (stream.read((char*)out.data(), 4))
+	{
+		return true;
+	}
+	else
+	{
+		return false;
+	}
+}
+
+bool pngimp::FileReader::readSignature(Signature& out)
+{
+	char s[8];
+	if (stream.read(s, 8))
+	{
+		std::copy(std::begin(s), std::end(s), out.begin());
+		return true;
+	}
+	else
+	{
+		return false;
+	}
+}
+
+bool pngimp::FileReader::readNbytes(std::vector<unsigned char>& destination, size_t count)
+{
+	while (count > 0)
+	{
+		if (count > FileReaderBuffSize)
+		{
+			if (!stream.read((char*)buffer->data(), FileReaderBuffSize))
+			{
+				return false;
+			}
+
+			std::copy( buffer->begin(), buffer->end(), std::back_inserter(destination));
+			count -= FileReaderBuffSize;
+		}
+		else
+		{
+			if (!stream.read((char*)buffer->data(), count))
+			{
+				return false;
+			}
+
+			std::copy(buffer->begin(), buffer->begin() + count, std::back_inserter(destination));
+			count = 0;
+		}
+	}
+
+	return true;
+}
+
+bool pngimp::FileReader::skipNbytes(size_t count)
+{
+	while (count > 0)
+	{
+		if (count > FileReaderBuffSize)
+		{
+			if (!stream.read((char*)buffer->data(), FileReaderBuffSize))
+			{
+				return false;
+			}
+
+			count -= FileReaderBuffSize;
+		}
+		else
+		{
+			if (!stream.read((char*)buffer->data(), count))
+			{
+				return false;
+			}
+
+			count = 0;
+		}
+	}
+
+	return true;
+}
+
 namespace pngimp
 {
-	void deinterlace(PNG_IHDR& ihdr, std::vector<char>& interlaced_data, std::vector<char>& final_data)
+	void deinterlace(PNG_IHDR& ihdr, std::vector<unsigned char>& interlaced_data, std::vector<unsigned char>& final_data)
 	{
 
 	}
 	
-	void unfilter( PNG_IHDR& ihdr,std::vector<char>& filtered_data, std::vector<char>& interlaced_data)
+	void unfilter( PNG_IHDR& ihdr,std::vector<unsigned char>& filtered_data, std::vector<unsigned char>& interlaced_data)
 	{
 
 	}
 	
-	void inflate(PNG_IHDR& ihdr,const std::vector<char>& in, std::vector<char>& out)
+	void inflate(PNG_IHDR& ihdr,const std::vector<unsigned char>& in, std::vector<unsigned char>& out)
 	{
 		size_t width = static_cast<size_t>(ihdr.width) + 1;
 		size_t height = static_cast<size_t>(ihdr.height);
@@ -255,12 +288,12 @@ namespace pngimp
 			bool fdict;
 		}zhdr;
 		
-		zhdr.cm = (unsigned char)in[0] & 0x0f;
-		zhdr.cinfo = (unsigned char)in[0] >> 4;
+		zhdr.cm = in[0] & 0x0f;
+		zhdr.cinfo = in[0] >> 4;
 
-		zhdr.fdict = ((unsigned char)in[1] & 0b00100000) >> 5;
+		zhdr.fdict = (in[1] & 0b00100000) >> 5;
 
-		unsigned short fcheck_verify = (unsigned short)(unsigned char)in[0] << 8 | (unsigned short)(unsigned char)in[1];
+		unsigned short fcheck_verify = (unsigned short)in[0] << 8 | (unsigned short)in[1];
 
 		if (
 			fcheck_verify % 31 != 0 ||
@@ -291,81 +324,52 @@ namespace pngimp
 
 pngimp::BufferStruct pngimp::import(const char* path)
 {
-	FileBuffer file;
-	
-	{
-		constexpr int buffSize = 1024 * 32;
-		auto buff = std::make_unique<std::array<char, buffSize>>();
-		
-		std::ifstream ifs(path, std::ios::in | std::ios::binary);
-		
-		bool done = false;
-		while (!done)
-		{
-			if (ifs.read(buff->data(), buffSize))
-			{
-				file.bytes.insert(file.bytes.end(), buff->begin(), buff->end());
-			}
-			else
-			{
-				if (ifs.gcount() > 0)
-				{
-					file.bytes.insert(file.bytes.end(), buff->data(), buff->data() + ifs.gcount());
-				}
-				done = true;
-			}
-		}
-	}
+	FileReader file(path);
 
 	// Validate signature
-	PNG_8byte sig;
-	file.read8Bytes(sig);
+	Signature sig;
+	file.readSignature(sig);
 
-	if (!equal(sig, PNG_8byte(-119, 80, 78, 71, 13, 10, 26, 10)))
+	if (!equal(sig, Signature{ 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a }))
 	{
-		throw std::exception("");
+		throw std::exception();
 	}
 
 	PNG_IHDR ihdr;
-	std::vector<char> buffer0;
-	std::vector<char> buffer1;
+	std::vector<unsigned char> buffer0;
+	std::vector<unsigned char> buffer1;
 	int chunk_count = 0;
 	int IDAT_count = 0;
 
 	bool done = false;
 	while (!done)
 	{
-		PNG_4byte chunk_size_raw;
-		if (!file.read4Bytes(chunk_size_raw))
+		unsigned int chunk_size;
+		if (!file.readUint(chunk_size))
 		{
-			throw std::exception("");
+			throw std::exception();
 		}
 
-		unsigned int chunk_size = toUint(chunk_size_raw);
-
-		PNG_4byte chunk_name_raw;
-		if (!file.read4Bytes(chunk_name_raw))
+		ChunkName chunk_name;
+		if (!file.readChunkName(chunk_name))
 		{
-			throw std::exception("");
+			throw std::exception();
 		}
 
-		if (equal(chunk_name_raw, PNG_4byte('I', 'H', 'D', 'R')))
+		if (equal(chunk_name, ChunkName{ 'I', 'H', 'D', 'R' }))
 		{
 			if (chunk_size != 13)
 			{
-				throw std::exception("");
+				throw std::exception();
 			}
 
-			std::vector<char> temp_data = { file.bytes.begin() + file.pos, file.bytes.begin() + file.pos + chunk_size };
-			file.pos += chunk_size;
-
-			ihdr.width = toUint(PNG_4byte(temp_data[0], temp_data[1], temp_data[2], temp_data[3]));
-			ihdr.height = toUint(PNG_4byte(temp_data[4], temp_data[5], temp_data[6], temp_data[7]));
-			ihdr.bit_depth = temp_data[8];
-			ihdr.color_type = temp_data[9];
-			ihdr.compression = temp_data[10];
-			ihdr.filter = temp_data[11];
-			ihdr.interlace = temp_data[12];
+			file.readUint(ihdr.width);
+			file.readUint(ihdr.height);
+			file.readUchar(ihdr.bit_depth);
+			file.readUchar(ihdr.color_type);
+			file.readUchar(ihdr.compression);
+			file.readUchar(ihdr.filter);
+			file.readUchar(ihdr.interlace);
 
 			// Verify image is compatible. Only 8 bits per sample RGB or RGBA.
 			if (
@@ -379,33 +383,32 @@ pngimp::BufferStruct pngimp::import(const char* path)
 				throw std::exception("");
 			}
 		}
-		else if (equal(chunk_name_raw, PNG_4byte('I', 'D', 'A', 'T')))
+		else if (equal(chunk_name, ChunkName{ 'I', 'D', 'A', 'T' }))
 		{
-			std::copy(file.bytes.begin() + file.pos, file.bytes.begin() + file.pos + chunk_size, std::back_inserter(buffer0));
-			file.pos += chunk_size;
+			if (!file.readNbytes(buffer0, chunk_size))
+			{
+				throw std::exception();
+			}
 			++IDAT_count;
 		}
-		else if (equal(chunk_name_raw, PNG_4byte('I', 'E', 'N', 'D')))
+		else if (equal(chunk_name, ChunkName{ 'I', 'E', 'N', 'D' }))
 		{
 			done = true;
 		}
 		else
 		{
-			file.pos += chunk_size;
+			file.skipNbytes(chunk_size);
 		}
 		
 		// Discard CRC for now
-		PNG_4byte crc;
-		if (!file.read4Bytes(crc))
+		unsigned int crc;
+		if (!file.readUint(crc))
 		{
-			throw std::exception("");
+			throw std::exception();
 		}
 
 		++chunk_count;
 	}
-
-	file.bytes.clear();
-	file.bytes.shrink_to_fit();
 
 	inflate(ihdr, buffer0, buffer1);
 
@@ -413,7 +416,7 @@ pngimp::BufferStruct pngimp::import(const char* path)
 
 	unfilter(ihdr, buffer1, buffer0);
 
-	std::vector<char>& outBuffer = buffer0;
+	std::vector<unsigned char>& outBuffer = buffer0;
 	
 	if (ihdr.interlace == 1)
 	{
