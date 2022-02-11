@@ -121,7 +121,9 @@ namespace pngimp
 }
 
 namespace pngimp
+
 {
+	// Read file in 4KB chunks.
 	constexpr size_t FileReaderBuffSize = 1024 * 4;
 	
 	class FileReader
@@ -142,10 +144,12 @@ namespace pngimp
 
 pngimp::FileReader::FileReader(const char* path)
 {
+	// Allocate buffer and open stream to file.
 	buffer = std::make_unique<std::array<unsigned char, FileReaderBuffSize>>();
 	stream.open(path, std::ios::in | std::ios::binary);
 }
 
+// Read a single byte from the file.
 bool pngimp::FileReader::readUchar(unsigned char& out)
 {
 	char c;
@@ -160,6 +164,7 @@ bool pngimp::FileReader::readUchar(unsigned char& out)
 	}
 }
 
+// Read 4 bytes from the file. Interpret them as a big endian unsigned integer.
 bool pngimp::FileReader::readUint(unsigned int& out)
 {
 	char i[4];
@@ -174,6 +179,7 @@ bool pngimp::FileReader::readUint(unsigned int& out)
 	}
 }
 
+// Read 4 bytes from the file. Interpret them as a ChunkName (array of 4 chars).
 bool pngimp::FileReader::readChunkName(ChunkName& out)
 {
 	if (stream.read((char*)out.data(), 4))
@@ -186,6 +192,7 @@ bool pngimp::FileReader::readChunkName(ChunkName& out)
 	}
 }
 
+// Read 8 bytes from the file. Interpret them as a Signature (array of 8 chars).
 bool pngimp::FileReader::readSignature(Signature& out)
 {
 	char s[8];
@@ -200,12 +207,14 @@ bool pngimp::FileReader::readSignature(Signature& out)
 	}
 }
 
+// Read an arbitrary number of bytes from the file.
 bool pngimp::FileReader::readNbytes(std::vector<unsigned char>& destination, size_t count)
 {
 	while (count > 0)
 	{
 		if (count > FileReaderBuffSize)
 		{
+			// Read a buffer's worth of data and append it to the output vector.
 			if (!stream.read((char*)buffer->data(), FileReaderBuffSize))
 			{
 				return false;
@@ -216,6 +225,7 @@ bool pngimp::FileReader::readNbytes(std::vector<unsigned char>& destination, siz
 		}
 		else
 		{
+			// Read the remaining data into the buffer and append that amount to the output vector.
 			if (!stream.read((char*)buffer->data(), count))
 			{
 				return false;
@@ -229,6 +239,7 @@ bool pngimp::FileReader::readNbytes(std::vector<unsigned char>& destination, siz
 	return true;
 }
 
+// Read and discard an arbitrary number of bytes from the file.
 bool pngimp::FileReader::skipNbytes(size_t count)
 {
 	while (count > 0)
@@ -270,6 +281,9 @@ namespace pngimp
 	
 	void inflate(PNG_IHDR& ihdr,const std::vector<unsigned char>& in, std::vector<unsigned char>& out)
 	{
+		// Pre-allocate the output buffer to the appropriate size depending on whether the color format is RGB or RGBA.
+		// Each scanline is one byte wider since the buffer will be filled with filtered data. The first byte of each
+		// scanline indicates the filter method used.
 		size_t width = static_cast<size_t>(ihdr.width) + 1;
 		size_t height = static_cast<size_t>(ihdr.height);
 		if (ihdr.color_type == 2)
@@ -288,11 +302,14 @@ namespace pngimp
 			bool fdict;
 		}zhdr;
 		
+		// Bitwise operations to extract the compression method, compression info, and dictionary flag from the zlib header.
 		zhdr.cm = in[0] & 0x0f;
 		zhdr.cinfo = in[0] >> 4;
 
 		zhdr.fdict = (in[1] & 0b00100000) >> 5;
 
+		// fcheck_verify is built from the first 2 bytes of the compressed data block, interpreted as an unsigned 16 bit
+		// big endian integer. This value should be a multiple of 31 if these bytes are intact.
 		unsigned short fcheck_verify = (unsigned short)in[0] << 8 | (unsigned short)in[1];
 
 		if (
@@ -301,11 +318,12 @@ namespace pngimp
 			zhdr.cinfo > 7
 			)
 		{
-			throw std::exception("");
+			throw std::exception();
 		}
 
 		size_t in_pos;
 		
+		// Skip over dictionary if present.
 		if (zhdr.fdict)
 		{
 			in_pos = 6;
@@ -336,11 +354,19 @@ pngimp::BufferStruct pngimp::import(const char* path)
 	}
 
 	PNG_IHDR ihdr;
+	
+	// Buffers to ping-pong data back and forth between.
+	// Likely procedure is:
+	// 					[compressed data]	-> buffer0
+	//		buffer0 ->	[decompress]		-> buffer1
+	//		buffer1 ->	[unfilter]			-> buffer0
+	// 		buffer0 ->	[deinterlace]		-> buffer1
 	std::vector<unsigned char> buffer0;
 	std::vector<unsigned char> buffer1;
 	int chunk_count = 0;
 	int IDAT_count = 0;
 
+	// Loop through chunks.
 	bool done = false;
 	while (!done)
 	{
@@ -356,6 +382,7 @@ pngimp::BufferStruct pngimp::import(const char* path)
 			throw std::exception();
 		}
 
+		// Check if current chunk is the header.
 		if (equal(chunk_name, ChunkName{ 'I', 'H', 'D', 'R' }))
 		{
 			if (chunk_size != 13)
@@ -363,6 +390,7 @@ pngimp::BufferStruct pngimp::import(const char* path)
 				throw std::exception();
 			}
 
+			// Read header bytes.
 			file.readUint(ihdr.width);
 			file.readUint(ihdr.height);
 			file.readUchar(ihdr.bit_depth);
@@ -380,27 +408,33 @@ pngimp::BufferStruct pngimp::import(const char* path)
 				!(ihdr.interlace == 0 || ihdr.interlace == 1)
 				)
 			{
-				throw std::exception("");
+				throw std::exception();
 			}
 		}
+		// Check if current chunk is image data.
 		else if (equal(chunk_name, ChunkName{ 'I', 'D', 'A', 'T' }))
 		{
+			// Append image data in chunk to the compressed data buffer.
 			if (!file.readNbytes(buffer0, chunk_size))
 			{
 				throw std::exception();
 			}
 			++IDAT_count;
 		}
+		// Check if current chunk is final chunk.
 		else if (equal(chunk_name, ChunkName{ 'I', 'E', 'N', 'D' }))
 		{
+			// Stop looping though chunks.
 			done = true;
 		}
+		// Check if current chunk is any other chunk.
 		else
 		{
+			// Skip over current chunk data.
 			file.skipNbytes(chunk_size);
 		}
 		
-		// Discard CRC for now
+		// Read and discard CRC for now.
 		unsigned int crc;
 		if (!file.readUint(crc))
 		{
@@ -410,14 +444,18 @@ pngimp::BufferStruct pngimp::import(const char* path)
 		++chunk_count;
 	}
 
+	// Decompress image data.
 	inflate(ihdr, buffer0, buffer1);
 
 	buffer0.clear();
 
+	// Reverse the filtering applied to each scanline of the image.
 	unfilter(ihdr, buffer1, buffer0);
 
+	// Set the buffer containing unfiltered image data as the final output buffer in case there is no need to deinterlace it.
 	std::vector<unsigned char>& outBuffer = buffer0;
 	
+	// If the data needs to be deinterlaced, set the other buffer as the final output buffer and put deinterlaced data in it.
 	if (ihdr.interlace == 1)
 	{
 		buffer1.clear();
