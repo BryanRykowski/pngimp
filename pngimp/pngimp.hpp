@@ -9,6 +9,7 @@
 
 namespace pngimp
 {
+
 	struct PNG_IHDR
 	{
 		unsigned int width;
@@ -40,7 +41,11 @@ namespace pngimp
 		const int height();
 		BufferFormat format();
 	};
+	
+	BufferStruct import(const char* path);
 }
+
+#ifdef PNGIMP_IMPL
 
 pngimp::BufferStruct::BufferStruct(PNG_IHDR& ihdr, std::vector<unsigned char>& data)
 {
@@ -79,13 +84,6 @@ pngimp::BufferFormat pngimp::BufferStruct::format()
 
 namespace pngimp
 {
-	BufferStruct import(const char* path);
-}
-
-#ifdef PNGIMP_IMPL
-
-namespace pngimp
-{
 	typedef std::array<unsigned char, 4> ChunkName;
 	typedef std::array<unsigned char, 8> Signature;
 
@@ -121,7 +119,6 @@ namespace pngimp
 }
 
 namespace pngimp
-
 {
 	// Read file in 4KB chunks.
 	constexpr size_t FileReaderBuffSize = 1024 * 4;
