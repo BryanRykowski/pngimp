@@ -21,66 +21,85 @@ namespace pngimp
 		unsigned char interlace;
 	};
 
-	enum BufferFormat : char
+	enum ErrorType : int
 	{
-		RGB8 = 0,
-		RGBA8
+		NoError,
+		FilePathNull,
+		FileNotExist,
+		FileNotPNG,
+		UnsupportedFormat,
+		FileDataCorrupt
+	};
+
+	enum ColorType : unsigned char
+	{
+		GRAY = 0,
+		RGB = 2,
+		PALLETE = 3,
+		GRAYALPHA = 4,
+		RGBA = 6
 	};
 	
-	class BufferStruct
+	struct ImageStruct
+	{
+		unsigned char* bytes;
+		size_t nBytes;
+		unsigned int width;
+		unsigned int height;
+		unsigned char bitDepth;
+		ColorType colorType;
+	};
+	
+	bool Import(const char* path, ErrorType& errorType, ImageStruct& imageStruct);
+	
+#ifndef PNGIMP_NOEXCEPT
+
+	class FilePathNull : std::exception
+	{
+
+	};
+
+	class FileNotExist : std::exception
+	{
+
+	};
+
+	class FileNotPNG : std::exception
+	{
+
+	};
+
+	class UnsupportedFormat : std::exception
+	{
+
+	};
+
+	class FileDataCorrupt : std::exception
+	{
+
+	};
+	
+	class Image
 	{
 	private:
-		std::vector<unsigned char> _data;
-		int _width;
-		int _height;
-		BufferFormat _format;
+		std::vector<unsigned char> p_bytes;
+		unsigned int p_width;
+		unsigned int p_height;
+		unsigned char p_bitDepth;
+		ColorType p_colorType;
 	public:
-		BufferStruct(PNG_IHDR& ihdr, std::vector<unsigned char>& data);
-		const unsigned char* data();
-		const int width();
-		const int height();
-		BufferFormat format();
+		Image(const char* path);
+		const unsigned char* Bytes();
+		const size_t nBytes();
+		const unsigned int Width();
+		const unsigned int Height();
+		const unsigned char BitDepth();
+		const ColorType ColorType();
 	};
-	
-	BufferStruct import(const char* path);
 }
+#endif
 
 #ifdef PNGIMP_IMPL
-
-pngimp::BufferStruct::BufferStruct(PNG_IHDR& ihdr, std::vector<unsigned char>& data)
-{
-	std::copy(data.begin(), data.end(), std::back_inserter(_data));
-	_width = ihdr.width;
-	_height = ihdr.height;
-
-	if (ihdr.color_type == 2)
-	{
-		_format = BufferFormat::RGB8;
-	}
-	else
-	{
-		_format = BufferFormat::RGBA8;
-	}
-}
-
-const unsigned char* pngimp::BufferStruct::data()
-{
-	return _data.data();
-}
-
-const int pngimp::BufferStruct::width()
-{
-	return _width;
-}
-
-const int pngimp::BufferStruct::height()
-{
-	return _height;
-}
-pngimp::BufferFormat pngimp::BufferStruct::format()
-{
-	return _format;
-}
 
 namespace pngimp
 {
@@ -266,17 +285,17 @@ bool pngimp::FileReader::skipNbytes(size_t count)
 
 namespace pngimp
 {
-	void deinterlace(PNG_IHDR& ihdr, std::vector<unsigned char>& interlaced_data, std::vector<unsigned char>& final_data)
+	bool deinterlace(PNG_IHDR& ihdr, std::vector<unsigned char>& interlaced_data, std::vector<unsigned char>& final_data)
 	{
-
+		return false;
 	}
 	
-	void unfilter( PNG_IHDR& ihdr,std::vector<unsigned char>& filtered_data, std::vector<unsigned char>& interlaced_data)
+	bool unfilter( PNG_IHDR& ihdr,std::vector<unsigned char>& filtered_data, std::vector<unsigned char>& interlaced_data)
 	{
-
+		return false;
 	}
 	
-	void inflate(PNG_IHDR& ihdr,const std::vector<unsigned char>& in, std::vector<unsigned char>& out)
+	bool inflate(PNG_IHDR& ihdr,const std::vector<unsigned char>& in, std::vector<unsigned char>& out)
 	{
 		// Pre-allocate the output buffer to the appropriate size depending on whether the color format is RGB or RGBA.
 		// Each scanline is one byte wider since the buffer will be filled with filtered data. The first byte of each
@@ -315,7 +334,8 @@ namespace pngimp
 			zhdr.cinfo > 7
 			)
 		{
-			throw std::exception();
+			// Throw error
+			return false;
 		}
 
 		size_t in_pos;
@@ -334,132 +354,270 @@ namespace pngimp
 		{
 			++in_pos;
 		}
+
+		return false;
+	}
+
+	bool read(const char* path, ErrorType& errorType, PNG_IHDR& ihdr, std::vector<unsigned char>& bytes)
+	{
+		FileReader file(path);
+
+		// Validate signature
+		Signature sig;
+		file.readSignature(sig);
+
+		if (!equal(sig, Signature{ 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a }))
+		{
+			errorType = ErrorType::FileNotPNG;
+			return false;
+		}
+
+		// Buffers to ping-pong data back and forth between.
+		// Likely procedure is:
+		// 					[compressed data]	-> buffer0
+		//		buffer0 ->	[decompress]		-> buffer1
+		//		buffer1 ->	[unfilter]			-> buffer0
+		// 		buffer0 ->	[deinterlace]		-> buffer1
+		std::vector<unsigned char> buffer0;
+		std::vector<unsigned char> buffer1;
+		int chunk_count = 0;
+		int IDAT_count = 0;
+
+		// Loop through chunks.
+		bool done = false;
+		while (!done)
+		{
+			unsigned int chunk_size;
+			if (!file.readUint(chunk_size))
+			{
+				errorType = ErrorType::FileDataCorrupt;
+				return false;
+			}
+
+			ChunkName chunk_name;
+			if (!file.readChunkName(chunk_name))
+			{
+				errorType = ErrorType::FileDataCorrupt;
+				return false;
+			}
+
+			// Check if current chunk is the header.
+			if (equal(chunk_name, ChunkName{ 'I', 'H', 'D', 'R' }))
+			{
+				if (chunk_size != 13)
+				{
+					errorType = ErrorType::FileDataCorrupt;
+					return false;
+				}
+
+				// Read header bytes.
+				file.readUint(ihdr.width);
+				file.readUint(ihdr.height);
+				file.readUchar(ihdr.bit_depth);
+				file.readUchar(ihdr.color_type);
+				file.readUchar(ihdr.compression);
+				file.readUchar(ihdr.filter);
+				file.readUchar(ihdr.interlace);
+
+				// Verify image is compatible. Only 8 bits per sample RGB or RGBA.
+				if (
+					ihdr.bit_depth != 8 ||
+					!(ihdr.color_type == 2 || ihdr.color_type == 6) ||
+					ihdr.compression != 0 ||
+					ihdr.filter != 0 ||
+					!(ihdr.interlace == 0 || ihdr.interlace == 1)
+					)
+				{
+					errorType = ErrorType::UnsupportedFormat;
+					return false;
+				}
+			}
+			// Check if current chunk is image data.
+			else if (equal(chunk_name, ChunkName{ 'I', 'D', 'A', 'T' }))
+			{
+				// Append image data in chunk to the compressed data buffer.
+				if (!file.readNbytes(buffer0, chunk_size))
+				{
+					errorType = ErrorType::FileDataCorrupt;
+					return false;
+				}
+				++IDAT_count;
+			}
+			// Check if current chunk is final chunk.
+			else if (equal(chunk_name, ChunkName{ 'I', 'E', 'N', 'D' }))
+			{
+				// Stop looping though chunks.
+				done = true;
+			}
+			// Check if current chunk is any other chunk.
+			else
+			{
+				// Skip over current chunk data.
+				file.skipNbytes(chunk_size);
+			}
+		
+			// Read and discard CRC for now.
+			unsigned int crc;
+			if (!file.readUint(crc))
+			{
+				errorType = ErrorType::FileDataCorrupt;
+				return false;
+			}
+
+			++chunk_count;
+		}
+
+		// Decompress image data.
+		if (!inflate(ihdr, buffer0, buffer1))
+		{
+			errorType = ErrorType::FileDataCorrupt;
+			return false;
+		}
+
+
+		if (ihdr.interlace == 1)
+		{
+			// Reverse the filtering applied to each scanline of the image.
+			buffer0.clear();
+
+			if (!unfilter(ihdr, buffer1, buffer0))
+			{
+				errorType = ErrorType::FileDataCorrupt;
+				return false;
+			}
+			
+			if (!deinterlace(ihdr, buffer0, bytes))
+			{
+				errorType = ErrorType::FileDataCorrupt;
+				return false;
+			}
+		}
+		else
+		{
+			if (!unfilter(ihdr, buffer1, bytes))
+			{
+				errorType = ErrorType::FileDataCorrupt;
+				return false;
+			}
+		}
+
+		return true;
 	}
 }
 
-pngimp::BufferStruct pngimp::import(const char* path)
+bool pngimp::Import(const char* path, ErrorType& errorType, ImageStruct& imageStruct)
 {
-	FileReader file(path);
-
-	// Validate signature
-	Signature sig;
-	file.readSignature(sig);
-
-	if (!equal(sig, Signature{ 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a }))
+	if (path == 0)
 	{
-		throw std::exception();
+		errorType = ErrorType::FilePathNull;
+		return false;
 	}
 
 	PNG_IHDR ihdr;
-	
-	// Buffers to ping-pong data back and forth between.
-	// Likely procedure is:
-	// 					[compressed data]	-> buffer0
-	//		buffer0 ->	[decompress]		-> buffer1
-	//		buffer1 ->	[unfilter]			-> buffer0
-	// 		buffer0 ->	[deinterlace]		-> buffer1
-	std::vector<unsigned char> buffer0;
-	std::vector<unsigned char> buffer1;
-	int chunk_count = 0;
-	int IDAT_count = 0;
+	std::vector<unsigned char> bytes_vec;
 
-	// Loop through chunks.
-	bool done = false;
-	while (!done)
+	if (!read(path, errorType, ihdr, bytes_vec))
 	{
-		unsigned int chunk_size;
-		if (!file.readUint(chunk_size))
-		{
-			throw std::exception();
-		}
-
-		ChunkName chunk_name;
-		if (!file.readChunkName(chunk_name))
-		{
-			throw std::exception();
-		}
-
-		// Check if current chunk is the header.
-		if (equal(chunk_name, ChunkName{ 'I', 'H', 'D', 'R' }))
-		{
-			if (chunk_size != 13)
-			{
-				throw std::exception();
-			}
-
-			// Read header bytes.
-			file.readUint(ihdr.width);
-			file.readUint(ihdr.height);
-			file.readUchar(ihdr.bit_depth);
-			file.readUchar(ihdr.color_type);
-			file.readUchar(ihdr.compression);
-			file.readUchar(ihdr.filter);
-			file.readUchar(ihdr.interlace);
-
-			// Verify image is compatible. Only 8 bits per sample RGB or RGBA.
-			if (
-				ihdr.bit_depth != 8 ||
-				!(ihdr.color_type == 2 || ihdr.color_type == 6) ||
-				ihdr.compression != 0 ||
-				ihdr.filter != 0 ||
-				!(ihdr.interlace == 0 || ihdr.interlace == 1)
-				)
-			{
-				throw std::exception();
-			}
-		}
-		// Check if current chunk is image data.
-		else if (equal(chunk_name, ChunkName{ 'I', 'D', 'A', 'T' }))
-		{
-			// Append image data in chunk to the compressed data buffer.
-			if (!file.readNbytes(buffer0, chunk_size))
-			{
-				throw std::exception();
-			}
-			++IDAT_count;
-		}
-		// Check if current chunk is final chunk.
-		else if (equal(chunk_name, ChunkName{ 'I', 'E', 'N', 'D' }))
-		{
-			// Stop looping though chunks.
-			done = true;
-		}
-		// Check if current chunk is any other chunk.
-		else
-		{
-			// Skip over current chunk data.
-			file.skipNbytes(chunk_size);
-		}
-		
-		// Read and discard CRC for now.
-		unsigned int crc;
-		if (!file.readUint(crc))
-		{
-			throw std::exception();
-		}
-
-		++chunk_count;
+		return false;
 	}
 
-	// Decompress image data.
-	inflate(ihdr, buffer0, buffer1);
+	imageStruct.width = ihdr.width;
+	imageStruct.height = ihdr.height;
+	imageStruct.bitDepth = ihdr.bit_depth;
 
-	buffer0.clear();
-
-	// Reverse the filtering applied to each scanline of the image.
-	unfilter(ihdr, buffer1, buffer0);
-
-	// Set the buffer containing unfiltered image data as the final output buffer in case there is no need to deinterlace it.
-	std::vector<unsigned char>& outBuffer = buffer0;
-	
-	// If the data needs to be deinterlaced, set the other buffer as the final output buffer and put deinterlaced data in it.
-	if (ihdr.interlace == 1)
+	switch (ihdr.color_type)
 	{
-		buffer1.clear();
-		deinterlace(ihdr, buffer0, buffer1);
-		outBuffer = buffer1;
+		case 0: imageStruct.colorType = ColorType::GRAY; break;
+		case 2: imageStruct.colorType = ColorType::RGB; break;
+		case 3: imageStruct.colorType = ColorType::PALLETE; break;
+		case 4: imageStruct.colorType = ColorType::GRAYALPHA; break;
+		case 6: imageStruct.colorType = ColorType::RGBA; break;
+		default: break;
 	}
 
-	return BufferStruct(ihdr, outBuffer);
+	unsigned char *bytes = new unsigned char[bytes_vec.size()]();
+
+	std::copy(bytes_vec.begin(), bytes_vec.end(), bytes);
+
+	return true;
 }
+
+#ifndef PNGIMP_NOEXCEPT
+pngimp::Image::Image(const char* path)
+{
+	if (path == 0)
+	{
+		throw FilePathNull;
+	}
+
+	ErrorType errorType = ErrorType::NoError;
+	PNG_IHDR ihdr;
+
+	read(path, errorType, ihdr, p_bytes);
+
+	switch (errorType)
+	{
+		case pngimp::FileNotExist:
+			throw FileNotExist;
+			break;
+		case pngimp::FileNotPNG:
+			throw FileNotPNG;
+			break;
+		case pngimp::UnsupportedFormat:
+			throw UnsupportedFormat;
+			break;
+		case pngimp::FileDataCorrupt:
+			throw FileDataCorrupt;
+			break;
+		default:
+			break;
+	}
+
+	p_width = ihdr.width;
+	p_height = ihdr.height;
+	p_bitDepth = ihdr.bit_depth;
+
+	switch (ihdr.color_type)
+	{
+		case 0: p_colorType = ColorType::GRAY; break;
+		case 2: p_colorType = ColorType::RGB; break;
+		case 3: p_colorType = ColorType::PALLETE; break;
+		case 4: p_colorType = ColorType::GRAYALPHA; break;
+		case 6: p_colorType = ColorType::RGBA; break;
+		default: break;
+	}
+}
+
+const unsigned char* pngimp::Image::Bytes()
+{
+	return p_bytes.data();
+}
+
+const size_t pngimp::Image::nBytes()
+{
+	return p_bytes.size();
+}
+
+const unsigned int pngimp::Image::Width()
+{
+	return p_width;
+}
+
+const unsigned int pngimp::Image::Height()
+{
+	return p_height;
+}
+
+const unsigned char pngimp::Image::BitDepth()
+{
+	return p_bitDepth;
+}
+
+const pngimp::ColorType pngimp::Image::ColorType()
+{
+	return p_colorType;
+}
+
+#endif
+
 #endif
