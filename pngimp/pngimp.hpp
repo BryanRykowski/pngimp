@@ -436,10 +436,10 @@ namespace pngimp
 				file.readUchar(ihdr.filter);
 				file.readUchar(ihdr.interlace);
 
-				// Verify image is compatible. Only 8 bits per sample RGB or RGBA.
+				// Verify image is compatible. Only 8/16 bits per sample Greyscale/RGB/RGBA.
 				if (
-					ihdr.bit_depth != 8 ||
-					!(ihdr.color_type == 2 || ihdr.color_type == 6) ||
+					!(ihdr.bit_depth == 8 || ihdr.bit_depth == 16) ||
+					!(ihdr.color_type == 0 || ihdr.color_type == 2 || ihdr.color_type == 6) ||
 					ihdr.compression != 0 ||
 					ihdr.filter != 0 ||
 					!(ihdr.interlace == 0 || ihdr.interlace == 1)
