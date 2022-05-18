@@ -69,8 +69,6 @@ namespace pngimp
 	
 	bool Import(const char* path, ErrorType& errorType, ImageStruct& imageStruct);
 	
-#ifndef PNGIMP_NOEXCEPT
-
 	class FilePathNull : std::exception
 	{
 
@@ -114,7 +112,6 @@ namespace pngimp
 		const ColorType ColorType();
 	};
 }
-#endif
 
 #ifdef PNGIMP_IMPL
 
@@ -559,7 +556,6 @@ bool pngimp::Import(const char* path, ErrorType& errorType, ImageStruct& imageSt
 	return true;
 }
 
-#ifndef PNGIMP_NOEXCEPT
 pngimp::Image::Image(const char* path)
 {
 	if (path == 0)
@@ -634,7 +630,5 @@ const pngimp::ColorType pngimp::Image::ColorType()
 {
 	return p_colorType;
 }
-
-#endif
 
 #endif
