@@ -48,7 +48,7 @@ namespace pngimp
 		FileDataCorrupt
 	};
 
-	enum ColorType : unsigned char
+    enum ColorType_t : unsigned char
 	{
 		GRAY = 0,
 		RGB = 2,
@@ -64,7 +64,7 @@ namespace pngimp
 		unsigned int width;
 		unsigned int height;
 		unsigned char bitDepth;
-		ColorType colorType;
+        ColorType_t colorType;
 	};
 	
 	bool Import(const char* path, ErrorType& errorType, ImageStruct& imageStruct);
@@ -101,7 +101,7 @@ namespace pngimp
 		unsigned int p_width;
 		unsigned int p_height;
 		unsigned char p_bitDepth;
-		ColorType p_colorType;
+        ColorType_t p_colorType;
 	public:
 		Image(const char* path);
 		const unsigned char* Bytes();
@@ -109,7 +109,7 @@ namespace pngimp
 		const unsigned int Width();
 		const unsigned int Height();
 		const unsigned char BitDepth();
-		const ColorType ColorType();
+        ColorType_t ColorType();
 	};
 }
 
@@ -541,11 +541,11 @@ bool pngimp::Import(const char* path, ErrorType& errorType, ImageStruct& imageSt
 
 	switch (ihdr.color_type)
 	{
-		case 0: imageStruct.colorType = ColorType::GRAY; break;
-		case 2: imageStruct.colorType = ColorType::RGB; break;
-		case 3: imageStruct.colorType = ColorType::PALLETE; break;
-		case 4: imageStruct.colorType = ColorType::GRAYALPHA; break;
-		case 6: imageStruct.colorType = ColorType::RGBA; break;
+        case 0: imageStruct.colorType = ColorType_t::GRAY; break;
+        case 2: imageStruct.colorType = ColorType_t::RGB; break;
+        case 3: imageStruct.colorType = ColorType_t::PALLETE; break;
+        case 4: imageStruct.colorType = ColorType_t::GRAYALPHA; break;
+        case 6: imageStruct.colorType = ColorType_t::RGBA; break;
 		default: break;
 	}
 
@@ -592,11 +592,11 @@ pngimp::Image::Image(const char* path)
 
 	switch (ihdr.color_type)
 	{
-		case 0: p_colorType = ColorType::GRAY; break;
-		case 2: p_colorType = ColorType::RGB; break;
-		case 3: p_colorType = ColorType::PALLETE; break;
-		case 4: p_colorType = ColorType::GRAYALPHA; break;
-		case 6: p_colorType = ColorType::RGBA; break;
+        case 0: p_colorType = ColorType_t::GRAY; break;
+        case 2: p_colorType = ColorType_t::RGB; break;
+        case 3: p_colorType = ColorType_t::PALLETE; break;
+        case 4: p_colorType = ColorType_t::GRAYALPHA; break;
+        case 6: p_colorType = ColorType_t::RGBA; break;
 		default: break;
 	}
 }
@@ -626,7 +626,7 @@ const unsigned char pngimp::Image::BitDepth()
 	return p_bitDepth;
 }
 
-const pngimp::ColorType pngimp::Image::ColorType()
+pngimp::ColorType_t pngimp::Image::ColorType()
 {
 	return p_colorType;
 }

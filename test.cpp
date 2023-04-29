@@ -3,7 +3,7 @@
 
 int main(int argc, char** argv)
 {
-    pngimp::BufferStruct buff = pngimp::import("test0.png");
+    pngimp::Image image("test0.png");
     
     return 0;
 }
