@@ -11,3 +11,4 @@
 *.dll
 *.so
 *.exe
+CMakeLists.txt.user
