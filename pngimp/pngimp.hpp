@@ -38,16 +38,6 @@ namespace pngimp
 		unsigned char interlace;
 	};
 
-	enum ErrorType : int
-	{
-		NoError,
-		FilePathNull,
-		FileNotExist,
-		FileNotPNG,
-		UnsupportedFormat,
-		FileDataCorrupt
-	};
-
     enum ColorType_t : unsigned char
 	{
 		GRAY = 0,
@@ -109,7 +99,7 @@ namespace pngimp
         bool deinterlace(PNG_IHDR& ihdr, std::vector<unsigned char>& interlaced_data, std::vector<unsigned char>& final_data);
         bool unfilter( PNG_IHDR& ihdr,std::vector<unsigned char>& filtered_data, std::vector<unsigned char>& interlaced_data);
         bool inflate(PNG_IHDR& ihdr,const std::vector<unsigned char>& in, std::vector<unsigned char>& out);
-        bool read(const char* path, ErrorType& errorType, PNG_IHDR& ihdr, std::vector<unsigned char>& bytes);
+        bool read(const char* path, PNG_IHDR& ihdr, std::vector<unsigned char>& bytes);
 	public:
 		Image(const char* path);
 		const unsigned char* Bytes();
@@ -371,7 +361,7 @@ namespace pngimp
 		return false;
 	}
 
-    bool Image::read(const char* path, ErrorType& errorType, PNG_IHDR& ihdr, std::vector<unsigned char>& bytes)
+    bool Image::read(const char* path, PNG_IHDR& ihdr, std::vector<unsigned char>& bytes)
 	{
 		FileReader file(path);
 
@@ -381,7 +371,7 @@ namespace pngimp
 
 		if (!equal(sig, Signature{ 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a }))
 		{
-			errorType = ErrorType::FileNotPNG;
+            throw FileNotPNG();
 			return false;
 		}
 
@@ -403,14 +393,14 @@ namespace pngimp
 			unsigned int chunk_size;
 			if (!file.readUint(chunk_size))
 			{
-				errorType = ErrorType::FileDataCorrupt;
+                throw FileDataCorrupt();
 				return false;
 			}
 
 			ChunkName chunk_name;
 			if (!file.readChunkName(chunk_name))
 			{
-				errorType = ErrorType::FileDataCorrupt;
+                throw FileDataCorrupt();
 				return false;
 			}
 
@@ -419,7 +409,7 @@ namespace pngimp
 			{
 				if (chunk_size != 13)
 				{
-					errorType = ErrorType::FileDataCorrupt;
+                    throw FileDataCorrupt();
 					return false;
 				}
 
@@ -441,7 +431,7 @@ namespace pngimp
 					!(ihdr.interlace == 0 || ihdr.interlace == 1)
 					)
 				{
-					errorType = ErrorType::UnsupportedFormat;
+                    throw UnsupportedFormat();
 					return false;
 				}
 			}
@@ -451,7 +441,7 @@ namespace pngimp
 				// Append image data in chunk to the compressed data buffer.
 				if (!file.readNbytes(buffer0, chunk_size))
 				{
-					errorType = ErrorType::FileDataCorrupt;
+                    throw FileDataCorrupt();
 					return false;
 				}
 				++IDAT_count;
@@ -473,7 +463,7 @@ namespace pngimp
 			unsigned int crc;
 			if (!file.readUint(crc))
 			{
-				errorType = ErrorType::FileDataCorrupt;
+                throw FileDataCorrupt();
 				return false;
 			}
 
@@ -483,7 +473,7 @@ namespace pngimp
 		// Decompress image data.
 		if (!inflate(ihdr, buffer0, buffer1))
 		{
-			errorType = ErrorType::FileDataCorrupt;
+            throw FileDataCorrupt();
 			return false;
 		}
 
@@ -495,13 +485,13 @@ namespace pngimp
 
 			if (!unfilter(ihdr, buffer1, buffer0))
 			{
-				errorType = ErrorType::FileDataCorrupt;
+                throw FileDataCorrupt();
 				return false;
 			}
 			
 			if (!deinterlace(ihdr, buffer0, bytes))
 			{
-				errorType = ErrorType::FileDataCorrupt;
+                throw FileDataCorrupt();
 				return false;
 			}
 		}
@@ -509,7 +499,7 @@ namespace pngimp
 		{
 			if (!unfilter(ihdr, buffer1, bytes))
 			{
-				errorType = ErrorType::FileDataCorrupt;
+                throw FileDataCorrupt();
 				return false;
 			}
 		}
@@ -521,31 +511,12 @@ namespace pngimp
     {
         if (path == 0)
         {
-            throw FilePathNull;
+            throw FilePathNull();
         }
 
-        ErrorType errorType = ErrorType::NoError;
         PNG_IHDR ihdr;
 
-        read(path, errorType, ihdr, p_bytes);
-
-        switch (errorType)
-        {
-            case pngimp::FileNotExist:
-                throw FileNotExist;
-                break;
-            case pngimp::FileNotPNG:
-                throw FileNotPNG;
-                break;
-            case pngimp::UnsupportedFormat:
-                throw UnsupportedFormat;
-                break;
-            case pngimp::FileDataCorrupt:
-                throw FileDataCorrupt;
-                break;
-            default:
-                break;
-        }
+        read(path, ihdr, p_bytes);
 
         p_width = ihdr.width;
         p_height = ihdr.height;
