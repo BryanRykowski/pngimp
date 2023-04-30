@@ -84,10 +84,9 @@ namespace pngimp
 
         bool equal(const Signature& a, const Signature& b);
         bool equal(const ChunkName& a, const ChunkName& b);
-        bool deinterlace(PNG_IHDR& ihdr, std::vector<unsigned char>& interlaced_data, std::vector<unsigned char>& final_data);
-        bool unfilter( PNG_IHDR& ihdr,std::vector<unsigned char>& filtered_data, std::vector<unsigned char>& interlaced_data);
-        bool inflate(PNG_IHDR& ihdr,const std::vector<unsigned char>& in, std::vector<unsigned char>& out);
-        bool read(const char* path, PNG_IHDR& ihdr, std::vector<unsigned char>& bytes);
+        void deinterlace(std::vector<unsigned char>& interlaced_data, std::vector<unsigned char>& final_data);
+        void unfilter(std::vector<unsigned char>& filtered_data, std::vector<unsigned char>& interlaced_data);
+        void inflate(const std::vector<unsigned char>& in, std::vector<unsigned char>& out);
 	public:
 		Image(const char* path);
         unsigned char* Bytes();
@@ -103,36 +102,6 @@ namespace pngimp
 
 namespace pngimp
 {
-    bool Image::equal(const Signature& a, const Signature& b)
-	{
-		bool eq = true;
-
-		for (char i = 0; i < 8; i++)
-		{
-			if (a[i] != b[i])
-			{
-				eq = false;
-			}
-		}
-
-		return eq;
-	}
-
-    bool Image::equal(const ChunkName& a, const ChunkName& b)
-	{
-		bool eq = true;
-
-		for (char i = 0; i < 4; i++)
-		{
-			if (a[i] != b[i])
-			{
-				eq = false;
-			}
-		}
-
-		return eq;
-	}
-
     // Read file in 4KB chunks.
 	constexpr size_t FileReaderBuffSize = 1024 * 4;
 	
@@ -276,17 +245,47 @@ namespace pngimp
         return true;
     }
 
-    bool Image::deinterlace(PNG_IHDR& ihdr, std::vector<unsigned char>& interlaced_data, std::vector<unsigned char>& final_data)
+    bool Image::equal(const Signature& a, const Signature& b)
+    {
+        bool eq = true;
+
+        for (char i = 0; i < 8; i++)
+        {
+            if (a[i] != b[i])
+            {
+                eq = false;
+            }
+        }
+
+        return eq;
+    }
+
+    bool Image::equal(const ChunkName& a, const ChunkName& b)
+    {
+        bool eq = true;
+
+        for (char i = 0; i < 4; i++)
+        {
+            if (a[i] != b[i])
+            {
+                eq = false;
+            }
+        }
+
+        return eq;
+    }
+
+    void Image::deinterlace(std::vector<unsigned char>& interlaced_data, std::vector<unsigned char>& final_data)
 	{
-		return false;
+
 	}
 	
-    bool Image::unfilter( PNG_IHDR& ihdr,std::vector<unsigned char>& filtered_data, std::vector<unsigned char>& interlaced_data)
+    void Image::unfilter(std::vector<unsigned char>& filtered_data, std::vector<unsigned char>& interlaced_data)
 	{
-		return false;
+
 	}
 	
-    bool Image::inflate(PNG_IHDR& ihdr,const std::vector<unsigned char>& in, std::vector<unsigned char>& out)
+    void Image::inflate(const std::vector<unsigned char>& in, std::vector<unsigned char>& out)
 	{
 		// Pre-allocate the output buffer to the appropriate size depending on whether the color format is RGB or RGBA.
 		// Each scanline is one byte wider since the buffer will be filled with filtered data. The first byte of each
@@ -325,8 +324,7 @@ namespace pngimp
 			zhdr.cinfo > 7
 			)
 		{
-			// Throw error
-			return false;
+            throw FileDataCorrupt();
 		}
 
 		size_t in_pos;
@@ -345,13 +343,16 @@ namespace pngimp
 		{
 			++in_pos;
 		}
-
-		return false;
 	}
 
-    bool Image::read(const char* path, PNG_IHDR& ihdr, std::vector<unsigned char>& bytes)
-	{
-		FileReader file(path);
+    Image::Image(const char* path)
+    {
+        if (path == 0)
+        {
+            throw FilePathNull();
+        }
+
+        FileReader file(path);
 
 		// Validate signature
 		Signature sig;
@@ -360,7 +361,6 @@ namespace pngimp
 		if (!equal(sig, Signature{ 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a }))
 		{
             throw FileNotPNG();
-			return false;
 		}
 
 		// Buffers to ping-pong data back and forth between.
@@ -382,14 +382,12 @@ namespace pngimp
 			if (!file.readUint(chunk_size))
 			{
                 throw FileDataCorrupt();
-				return false;
 			}
 
 			ChunkName chunk_name;
 			if (!file.readChunkName(chunk_name))
 			{
                 throw FileDataCorrupt();
-				return false;
 			}
 
 			// Check if current chunk is the header.
@@ -398,7 +396,6 @@ namespace pngimp
 				if (chunk_size != 13)
 				{
                     throw FileDataCorrupt();
-					return false;
 				}
 
 				// Read header bytes.
@@ -420,7 +417,6 @@ namespace pngimp
 					)
 				{
                     throw UnsupportedFormat();
-					return false;
 				}
 			}
 			// Check if current chunk is image data.
@@ -430,7 +426,6 @@ namespace pngimp
 				if (!file.readNbytes(buffer0, chunk_size))
 				{
                     throw FileDataCorrupt();
-					return false;
 				}
 				++IDAT_count;
 			}
@@ -452,58 +447,28 @@ namespace pngimp
 			if (!file.readUint(crc))
 			{
                 throw FileDataCorrupt();
-				return false;
 			}
 
 			++chunk_count;
 		}
 
 		// Decompress image data.
-		if (!inflate(ihdr, buffer0, buffer1))
-		{
-            throw FileDataCorrupt();
-			return false;
-		}
-
+        inflate(buffer0, buffer1);
 
 		if (ihdr.interlace == 1)
 		{
 			// Reverse the filtering applied to each scanline of the image.
 			buffer0.clear();
 
-			if (!unfilter(ihdr, buffer1, buffer0))
-			{
-                throw FileDataCorrupt();
-				return false;
-			}
-			
-			if (!deinterlace(ihdr, buffer0, bytes))
-			{
-                throw FileDataCorrupt();
-				return false;
-			}
+            unfilter(buffer1, buffer0);
+
+            deinterlace(buffer0, p_bytes);
 		}
 		else
 		{
-			if (!unfilter(ihdr, buffer1, bytes))
-			{
-                throw FileDataCorrupt();
-				return false;
-			}
+            unfilter(buffer1, p_bytes);
 		}
-
-		return true;
 	}
-
-    Image::Image(const char* path)
-    {
-        if (path == 0)
-        {
-            throw FilePathNull();
-        }
-
-        read(path, ihdr, p_bytes);
-    }
 
     unsigned char* pngimp::Image::Bytes()
     {
