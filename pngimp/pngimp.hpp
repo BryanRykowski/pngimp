@@ -67,8 +67,6 @@ namespace pngimp
         ColorType_t colorType;
 	};
 	
-	bool Import(const char* path, ErrorType& errorType, ImageStruct& imageStruct);
-	
 	class FilePathNull : std::exception
 	{
 
@@ -94,7 +92,10 @@ namespace pngimp
 
 	};
 	
-	class Image
+    typedef std::array<unsigned char, 4> ChunkName;
+    typedef std::array<unsigned char, 8> Signature;
+
+    class Image
 	{
 	private:
 		std::vector<unsigned char> p_bytes;
@@ -102,6 +103,13 @@ namespace pngimp
 		unsigned int p_height;
 		unsigned char p_bitDepth;
         ColorType_t p_colorType;
+
+        bool equal(const Signature& a, const Signature& b);
+        bool equal(const ChunkName& a, const ChunkName& b);
+        bool deinterlace(PNG_IHDR& ihdr, std::vector<unsigned char>& interlaced_data, std::vector<unsigned char>& final_data);
+        bool unfilter( PNG_IHDR& ihdr,std::vector<unsigned char>& filtered_data, std::vector<unsigned char>& interlaced_data);
+        bool inflate(PNG_IHDR& ihdr,const std::vector<unsigned char>& in, std::vector<unsigned char>& out);
+        bool read(const char* path, ErrorType& errorType, PNG_IHDR& ihdr, std::vector<unsigned char>& bytes);
 	public:
 		Image(const char* path);
 		const unsigned char* Bytes();
@@ -112,15 +120,12 @@ namespace pngimp
         ColorType_t ColorType();
 	};
 }
-
+#define PNGIMP_IMPL
 #ifdef PNGIMP_IMPL
 
 namespace pngimp
 {
-	typedef std::array<unsigned char, 4> ChunkName;
-	typedef std::array<unsigned char, 8> Signature;
-
-	bool equal(const Signature& a, const Signature& b)
+    bool Image::equal(const Signature& a, const Signature& b)
 	{
 		bool eq = true;
 
@@ -135,7 +140,7 @@ namespace pngimp
 		return eq;
 	}
 
-	bool equal(const ChunkName& a, const ChunkName& b)
+    bool Image::equal(const ChunkName& a, const ChunkName& b)
 	{
 		bool eq = true;
 
@@ -149,11 +154,8 @@ namespace pngimp
 
 		return eq;
 	}
-}
 
-namespace pngimp
-{
-	// Read file in 4KB chunks.
+    // Read file in 4KB chunks.
 	constexpr size_t FileReaderBuffSize = 1024 * 4;
 	
 	class FileReader
@@ -170,146 +172,143 @@ namespace pngimp
 		bool readNbytes(std::vector<unsigned char>& destination, size_t count);
 		bool skipNbytes(size_t count);
 	};
-}
 
-pngimp::FileReader::FileReader(const char* path)
-{
-	// Allocate buffer and open stream to file.
-	buffer = std::make_unique<std::array<unsigned char, FileReaderBuffSize>>();
-	stream.open(path, std::ios::in | std::ios::binary);
-}
+    FileReader::FileReader(const char* path)
+    {
+        // Allocate buffer and open stream to file.
+        buffer = std::make_unique<std::array<unsigned char, FileReaderBuffSize>>();
+        stream.open(path, std::ios::in | std::ios::binary);
+    }
 
-// Read a single byte from the file.
-bool pngimp::FileReader::readUchar(unsigned char& out)
-{
-	char c;
-	if (stream.read(&c, 1))
-	{
-		out = (unsigned char)c;
-		return true;
-	}
-	else
-	{
-		return false;
-	}
-}
+    // Read a single byte from the file.
+    bool FileReader::readUchar(unsigned char& out)
+    {
+        char c;
+        if (stream.read(&c, 1))
+        {
+            out = (unsigned char)c;
+            return true;
+        }
+        else
+        {
+            return false;
+        }
+    }
 
-// Read 4 bytes from the file. Interpret them as a big endian unsigned integer.
-bool pngimp::FileReader::readUint(unsigned int& out)
-{
-	char i[4];
-	if (stream.read(i, 4))
-	{
-		out = (unsigned int)(unsigned char)i[0] << 24 | (unsigned int)(unsigned char)i[1] << 16 | (unsigned int)(unsigned char)i[2] << 8 | (unsigned int)(unsigned char)i[3];
-		return true;
-	}
-	else
-	{
-		return false;
-	}
-}
+    // Read 4 bytes from the file. Interpret them as a big endian unsigned integer.
+    bool FileReader::readUint(unsigned int& out)
+    {
+        char i[4];
+        if (stream.read(i, 4))
+        {
+            out = (unsigned int)(unsigned char)i[0] << 24 | (unsigned int)(unsigned char)i[1] << 16 | (unsigned int)(unsigned char)i[2] << 8 | (unsigned int)(unsigned char)i[3];
+            return true;
+        }
+        else
+        {
+            return false;
+        }
+    }
 
-// Read 4 bytes from the file. Interpret them as a ChunkName (array of 4 chars).
-bool pngimp::FileReader::readChunkName(ChunkName& out)
-{
-	if (stream.read((char*)out.data(), 4))
-	{
-		return true;
-	}
-	else
-	{
-		return false;
-	}
-}
+    // Read 4 bytes from the file. Interpret them as a ChunkName (array of 4 chars).
+    bool FileReader::readChunkName(ChunkName& out)
+    {
+        if (stream.read((char*)out.data(), 4))
+        {
+            return true;
+        }
+        else
+        {
+            return false;
+        }
+    }
 
-// Read 8 bytes from the file. Interpret them as a Signature (array of 8 chars).
-bool pngimp::FileReader::readSignature(Signature& out)
-{
-	char s[8];
-	if (stream.read(s, 8))
-	{
-		std::copy(std::begin(s), std::end(s), out.begin());
-		return true;
-	}
-	else
-	{
-		return false;
-	}
-}
+    // Read 8 bytes from the file. Interpret them as a Signature (array of 8 chars).
+    bool FileReader::readSignature(Signature& out)
+    {
+        char s[8];
+        if (stream.read(s, 8))
+        {
+            std::copy(std::begin(s), std::end(s), out.begin());
+            return true;
+        }
+        else
+        {
+            return false;
+        }
+    }
 
-// Read an arbitrary number of bytes from the file.
-bool pngimp::FileReader::readNbytes(std::vector<unsigned char>& destination, size_t count)
-{
-	while (count > 0)
-	{
-		if (count > FileReaderBuffSize)
-		{
-			// Read a buffer's worth of data and append it to the output vector.
-			if (!stream.read((char*)buffer->data(), FileReaderBuffSize))
-			{
-				return false;
-			}
+    // Read an arbitrary number of bytes from the file.
+    bool FileReader::readNbytes(std::vector<unsigned char>& destination, size_t count)
+    {
+        while (count > 0)
+        {
+            if (count > FileReaderBuffSize)
+            {
+                // Read a buffer's worth of data and append it to the output vector.
+                if (!stream.read((char*)buffer->data(), FileReaderBuffSize))
+                {
+                    return false;
+                }
 
-			std::copy( buffer->begin(), buffer->end(), std::back_inserter(destination));
-			count -= FileReaderBuffSize;
-		}
-		else
-		{
-			// Read the remaining data into the buffer and append that amount to the output vector.
-			if (!stream.read((char*)buffer->data(), count))
-			{
-				return false;
-			}
+                std::copy( buffer->begin(), buffer->end(), std::back_inserter(destination));
+                count -= FileReaderBuffSize;
+            }
+            else
+            {
+                // Read the remaining data into the buffer and append that amount to the output vector.
+                if (!stream.read((char*)buffer->data(), count))
+                {
+                    return false;
+                }
 
-			std::copy(buffer->begin(), buffer->begin() + count, std::back_inserter(destination));
-			count = 0;
-		}
-	}
+                std::copy(buffer->begin(), buffer->begin() + count, std::back_inserter(destination));
+                count = 0;
+            }
+        }
 
-	return true;
-}
+        return true;
+    }
 
-// Read and discard an arbitrary number of bytes from the file.
-bool pngimp::FileReader::skipNbytes(size_t count)
-{
-	while (count > 0)
-	{
-		if (count > FileReaderBuffSize)
-		{
-			if (!stream.read((char*)buffer->data(), FileReaderBuffSize))
-			{
-				return false;
-			}
+    // Read and discard an arbitrary number of bytes from the file.
+    bool FileReader::skipNbytes(size_t count)
+    {
+        while (count > 0)
+        {
+            if (count > FileReaderBuffSize)
+            {
+                if (!stream.read((char*)buffer->data(), FileReaderBuffSize))
+                {
+                    return false;
+                }
 
-			count -= FileReaderBuffSize;
-		}
-		else
-		{
-			if (!stream.read((char*)buffer->data(), count))
-			{
-				return false;
-			}
+                count -= FileReaderBuffSize;
+            }
+            else
+            {
+                if (!stream.read((char*)buffer->data(), count))
+                {
+                    return false;
+                }
 
-			count = 0;
-		}
-	}
+                count = 0;
+            }
+        }
 
-	return true;
-}
+        return true;
+    }
 
-namespace pngimp
-{
-	bool deinterlace(PNG_IHDR& ihdr, std::vector<unsigned char>& interlaced_data, std::vector<unsigned char>& final_data)
+    bool Image::deinterlace(PNG_IHDR& ihdr, std::vector<unsigned char>& interlaced_data, std::vector<unsigned char>& final_data)
 	{
 		return false;
 	}
 	
-	bool unfilter( PNG_IHDR& ihdr,std::vector<unsigned char>& filtered_data, std::vector<unsigned char>& interlaced_data)
+    bool Image::unfilter( PNG_IHDR& ihdr,std::vector<unsigned char>& filtered_data, std::vector<unsigned char>& interlaced_data)
 	{
 		return false;
 	}
 	
-	bool inflate(PNG_IHDR& ihdr,const std::vector<unsigned char>& in, std::vector<unsigned char>& out)
+    bool Image::inflate(PNG_IHDR& ihdr,const std::vector<unsigned char>& in, std::vector<unsigned char>& out)
 	{
 		// Pre-allocate the output buffer to the appropriate size depending on whether the color format is RGB or RGBA.
 		// Each scanline is one byte wider since the buffer will be filled with filtered data. The first byte of each
@@ -372,7 +371,7 @@ namespace pngimp
 		return false;
 	}
 
-	bool read(const char* path, ErrorType& errorType, PNG_IHDR& ihdr, std::vector<unsigned char>& bytes)
+    bool Image::read(const char* path, ErrorType& errorType, PNG_IHDR& ihdr, std::vector<unsigned char>& bytes)
 	{
 		FileReader file(path);
 
@@ -517,118 +516,81 @@ namespace pngimp
 
 		return true;
 	}
-}
 
-bool pngimp::Import(const char* path, ErrorType& errorType, ImageStruct& imageStruct)
-{
-	if (path == 0)
-	{
-		errorType = ErrorType::FilePathNull;
-		return false;
-	}
+    Image::Image(const char* path)
+    {
+        if (path == 0)
+        {
+            throw FilePathNull;
+        }
 
-	PNG_IHDR ihdr;
-	std::vector<unsigned char> bytes_vec;
+        ErrorType errorType = ErrorType::NoError;
+        PNG_IHDR ihdr;
 
-	if (!read(path, errorType, ihdr, bytes_vec))
-	{
-		return false;
-	}
+        read(path, errorType, ihdr, p_bytes);
 
-	imageStruct.width = ihdr.width;
-	imageStruct.height = ihdr.height;
-	imageStruct.bitDepth = ihdr.bit_depth;
+        switch (errorType)
+        {
+            case pngimp::FileNotExist:
+                throw FileNotExist;
+                break;
+            case pngimp::FileNotPNG:
+                throw FileNotPNG;
+                break;
+            case pngimp::UnsupportedFormat:
+                throw UnsupportedFormat;
+                break;
+            case pngimp::FileDataCorrupt:
+                throw FileDataCorrupt;
+                break;
+            default:
+                break;
+        }
 
-	switch (ihdr.color_type)
-	{
-        case 0: imageStruct.colorType = ColorType_t::GRAY; break;
-        case 2: imageStruct.colorType = ColorType_t::RGB; break;
-        case 3: imageStruct.colorType = ColorType_t::PALLETE; break;
-        case 4: imageStruct.colorType = ColorType_t::GRAYALPHA; break;
-        case 6: imageStruct.colorType = ColorType_t::RGBA; break;
-		default: break;
-	}
+        p_width = ihdr.width;
+        p_height = ihdr.height;
+        p_bitDepth = ihdr.bit_depth;
 
-	unsigned char *bytes = new unsigned char[bytes_vec.size()]();
+        switch (ihdr.color_type)
+        {
+            case 0: p_colorType = ColorType_t::GRAY; break;
+            case 2: p_colorType = ColorType_t::RGB; break;
+            case 3: p_colorType = ColorType_t::PALLETE; break;
+            case 4: p_colorType = ColorType_t::GRAYALPHA; break;
+            case 6: p_colorType = ColorType_t::RGBA; break;
+            default: break;
+        }
+    }
 
-	std::copy(bytes_vec.begin(), bytes_vec.end(), bytes);
+    const unsigned char* pngimp::Image::Bytes()
+    {
+        return p_bytes.data();
+    }
 
-	return true;
-}
+    const size_t pngimp::Image::nBytes()
+    {
+        return p_bytes.size();
+    }
 
-pngimp::Image::Image(const char* path)
-{
-	if (path == 0)
-	{
-		throw FilePathNull;
-	}
+    const unsigned int Image::Width()
+    {
+        return p_width;
+    }
 
-	ErrorType errorType = ErrorType::NoError;
-	PNG_IHDR ihdr;
+    const unsigned int Image::Height()
+    {
+        return p_height;
+    }
 
-	read(path, errorType, ihdr, p_bytes);
+    const unsigned char Image::BitDepth()
+    {
+        return p_bitDepth;
+    }
 
-	switch (errorType)
-	{
-		case pngimp::FileNotExist:
-			throw FileNotExist;
-			break;
-		case pngimp::FileNotPNG:
-			throw FileNotPNG;
-			break;
-		case pngimp::UnsupportedFormat:
-			throw UnsupportedFormat;
-			break;
-		case pngimp::FileDataCorrupt:
-			throw FileDataCorrupt;
-			break;
-		default:
-			break;
-	}
-
-	p_width = ihdr.width;
-	p_height = ihdr.height;
-	p_bitDepth = ihdr.bit_depth;
-
-	switch (ihdr.color_type)
-	{
-        case 0: p_colorType = ColorType_t::GRAY; break;
-        case 2: p_colorType = ColorType_t::RGB; break;
-        case 3: p_colorType = ColorType_t::PALLETE; break;
-        case 4: p_colorType = ColorType_t::GRAYALPHA; break;
-        case 6: p_colorType = ColorType_t::RGBA; break;
-		default: break;
-	}
-}
-
-const unsigned char* pngimp::Image::Bytes()
-{
-	return p_bytes.data();
-}
-
-const size_t pngimp::Image::nBytes()
-{
-	return p_bytes.size();
-}
-
-const unsigned int pngimp::Image::Width()
-{
-	return p_width;
-}
-
-const unsigned int pngimp::Image::Height()
-{
-	return p_height;
-}
-
-const unsigned char pngimp::Image::BitDepth()
-{
-	return p_bitDepth;
-}
-
-pngimp::ColorType_t pngimp::Image::ColorType()
-{
-	return p_colorType;
+    ColorType_t Image::ColorType()
+    {
+        return p_colorType;
+    }
 }
 
 #endif
