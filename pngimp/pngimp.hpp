@@ -38,24 +38,15 @@ namespace pngimp
 		unsigned char interlace;
 	};
 
-    enum ColorType_t : unsigned char
-	{
-		GRAY = 0,
-		RGB = 2,
-		PALLETE = 3,
-		GRAYALPHA = 4,
-		RGBA = 6
-	};
-	
-	struct ImageStruct
-	{
-		unsigned char* bytes;
-		size_t nBytes;
-		unsigned int width;
-		unsigned int height;
-		unsigned char bitDepth;
-        ColorType_t colorType;
-	};
+    namespace ColorType
+    {
+        const unsigned char GRAY = 0;
+        const unsigned char RGB = 2;
+        const unsigned char PALLETE = 3;
+        const unsigned char GRAYALPHA = 4;
+        const unsigned char RGBA = 6;
+    }
+
 	
 	class FilePathNull : std::exception
 	{
@@ -89,10 +80,7 @@ namespace pngimp
 	{
 	private:
 		std::vector<unsigned char> p_bytes;
-		unsigned int p_width;
-		unsigned int p_height;
-		unsigned char p_bitDepth;
-        ColorType_t p_colorType;
+        PNG_IHDR ihdr;
 
         bool equal(const Signature& a, const Signature& b);
         bool equal(const ChunkName& a, const ChunkName& b);
@@ -102,15 +90,15 @@ namespace pngimp
         bool read(const char* path, PNG_IHDR& ihdr, std::vector<unsigned char>& bytes);
 	public:
 		Image(const char* path);
-		const unsigned char* Bytes();
-		const size_t nBytes();
-		const unsigned int Width();
-		const unsigned int Height();
-		const unsigned char BitDepth();
-        ColorType_t ColorType();
+        unsigned char* Bytes();
+        size_t nBytes();
+        unsigned int Width();
+        unsigned int Height();
+        unsigned char BitDepth();
+        unsigned char ColorType();
 	};
 }
-#define PNGIMP_IMPL
+
 #ifdef PNGIMP_IMPL
 
 namespace pngimp
@@ -514,53 +502,37 @@ namespace pngimp
             throw FilePathNull();
         }
 
-        PNG_IHDR ihdr;
-
         read(path, ihdr, p_bytes);
-
-        p_width = ihdr.width;
-        p_height = ihdr.height;
-        p_bitDepth = ihdr.bit_depth;
-
-        switch (ihdr.color_type)
-        {
-            case 0: p_colorType = ColorType_t::GRAY; break;
-            case 2: p_colorType = ColorType_t::RGB; break;
-            case 3: p_colorType = ColorType_t::PALLETE; break;
-            case 4: p_colorType = ColorType_t::GRAYALPHA; break;
-            case 6: p_colorType = ColorType_t::RGBA; break;
-            default: break;
-        }
     }
 
-    const unsigned char* pngimp::Image::Bytes()
+    unsigned char* pngimp::Image::Bytes()
     {
         return p_bytes.data();
     }
 
-    const size_t pngimp::Image::nBytes()
+    size_t pngimp::Image::nBytes()
     {
         return p_bytes.size();
     }
 
-    const unsigned int Image::Width()
+    unsigned int Image::Width()
     {
-        return p_width;
+        return ihdr.width;
     }
 
-    const unsigned int Image::Height()
+    unsigned int Image::Height()
     {
-        return p_height;
+        return ihdr.height;
     }
 
-    const unsigned char Image::BitDepth()
+    unsigned char Image::BitDepth()
     {
-        return p_bitDepth;
+        return ihdr.bit_depth;
     }
 
-    ColorType_t Image::ColorType()
+    unsigned char Image::ColorType()
     {
-        return p_colorType;
+        return ihdr.color_type;
     }
 }
 
