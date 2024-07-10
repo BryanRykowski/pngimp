@@ -1,10 +1,10 @@
 # pngimp
-A single-header PNG importer. Work in progress. MIT Licensed.
+A simple PNG importer. Work in progress. MIT Licensed.
 ## To Do:
 ### Core Goals:
 - [ ] Import 8/16 bit Grayscale/RGB/RGBA PNGs
-    - [x] Read Header
-    - [x] Read and Concatenate Data Blocks
+    - [ ] Read Header
+    - [ ] Read and Concatenate Data Blocks
     - [ ] Inflate Data
     - [ ] Unfilter Data
     - [ ] De-Interlace Data
