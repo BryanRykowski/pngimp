@@ -17,3 +17,44 @@
 
 #include "pngimp.hpp"
 
+namespace pngimp
+{
+	Image::Image(){}
+
+	Image::Image(std::vector<unsigned char>* data, int width, int height)
+	{
+		m_data.reset(data);
+		m_width = width;
+		m_height = height;
+	}
+
+	int Image::width()
+	{
+		return m_width;
+	}
+
+	int Image::height()
+	{
+		return m_height;
+	}
+	
+	size_t Image::size()
+	{
+		return m_data->size();
+	}
+	
+	unsigned char* Image::data()
+	{
+		return m_data->data();
+	}
+
+	ImageRGB8 OpenRGB8(const std::string& filepath)
+	{
+		return ImageRGB8();
+	}
+
+	ImageRGBA8 OpenRGBA8(const std::string& filepath)
+	{
+		return ImageRGBA8();
+	}
+}

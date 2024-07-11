@@ -16,4 +16,30 @@
 // pngimp.hpp
 
 #pragma once
+#include <cstddef>
+#include <vector>
+#include <memory>
 
+namespace pngimp
+{
+	class Image
+	{
+	private:
+		int m_width = 0;
+		int m_height = 0;
+		std::unique_ptr<std::vector<unsigned char>> m_data;
+	public:
+		Image(std::vector<unsigned char>* data, int width, int height);
+		Image();
+		int width();
+		int height();
+		size_t size();
+		unsigned char* data();
+	};
+
+	class ImageRGB8 : Image {};
+	class ImageRGBA8 : Image {};
+
+	ImageRGB8 OpenRGB8(const std::string& filepath);
+	ImageRGBA8 OpenRGBA8(const std::string& filepath);
+}
