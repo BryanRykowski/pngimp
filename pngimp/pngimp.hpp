@@ -19,9 +19,67 @@
 #include <cstddef>
 #include <vector>
 #include <memory>
+#include <exception>
 
 namespace pngimp
 {
+	class MalformedFile : public std::exception
+	{
+	public:
+		enum class Cause
+		{
+			BadSignature,		// The first 8 bytes of the file are wrong
+			BadHeader,			// The IHDR size is not 13 or bytes 4-7 are not "IHDR"
+			BadDimension,		// The height and/or width is 0
+			BadBitDepth,		// Invalid bit depth for a given color type
+			BadColorType,		// Invalid color type (not 1,2,4,8,16)
+			BadCompression,		// Compression is not 0
+			BadFilter,			// Filter is not 0
+			BadInterlace		// Interlace is not 0 or 1
+		} cause;
+
+		virtual const char* what()
+		{
+			return "The file has a non-conforming attribute";
+		}
+
+		MalformedFile(Cause c) : cause{c} {}
+	};
+
+	class StreamFail : public std::exception
+	{
+	public:
+		enum class Cause
+		{
+			OpenFail,			// The file does not exist or permissions are wrong
+			ReadFail			// The file stopped being available or ended unexpectedly
+		} cause;
+
+		virtual const char* what()
+		{
+			return "There was an error accessing the file";
+		}
+
+		StreamFail(Cause c) : cause{c} {}
+	};
+
+	class UnsupportedOption : public std::exception
+	{
+	public:
+		enum class Cause
+		{
+			ColorType,			// The color is not type 2 (RGB) or type 6 (RGBA)
+			BitDepth			// The bit depth is not 8
+		} cause;
+
+		virtual const char* what()
+		{
+			return "The color type or bit depth of the image are not supported by this decoder";
+		}
+
+		UnsupportedOption(Cause c) : cause{c} {}
+	};
+
 	class Image
 	{
 	private:
