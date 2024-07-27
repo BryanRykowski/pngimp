@@ -23,9 +23,8 @@ namespace pngimp
 {
 	Image::Image(){}
 
-	Image::Image(std::vector<unsigned char>* data, const ImageInfo& info)
+	Image::Image(SmartBuffer data, const ImageInfo& info) : m_data(std::move(data))
 	{
-		m_data.reset(data);
 		m_width = info.width;
 		m_height = info.height;
 		m_gamma = info.gamma;
@@ -68,7 +67,7 @@ namespace pngimp
 		return m_data->size();
 	}
 	
-	unsigned char* Image::data()
+	char* Image::data()
 	{
 		return m_data->data();
 	}

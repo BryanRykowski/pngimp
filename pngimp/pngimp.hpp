@@ -80,6 +80,8 @@ namespace pngimp
 		UnsupportedOption(Cause c) : cause{c} {}
 	};
 
+	typedef std::unique_ptr<std::vector<char>> SmartBuffer;
+
 	struct ImageInfo
 	{
 		unsigned int width = 0;
@@ -103,7 +105,7 @@ namespace pngimp
 	class Image
 	{
 	private:
-		std::unique_ptr<std::vector<unsigned char>> m_data;
+		SmartBuffer m_data;
 		int m_width = 0;
 		int m_height = 0;
 		unsigned int m_gamma_val = 0;
@@ -111,7 +113,7 @@ namespace pngimp
 		bool m_gamma = false;
 		ImageInfo::SRGBIntent m_srgb_val;
 	public:
-		Image(std::vector<unsigned char>* data, const ImageInfo& info);
+		Image(SmartBuffer data, const ImageInfo& info);
 		Image();
 		int width();
 		int height();
@@ -120,11 +122,18 @@ namespace pngimp
 		ImageInfo::SRGBIntent srgb_val();
 		bool srgb();
 		size_t size();
-		unsigned char* data();
+		char* data();
 	};
 
-	class ImageRGB8 : Image {};
-	class ImageRGBA8 : Image {};
+	class ImageRGB8 : public Image
+	{
+		using Image::Image;
+	};
+
+	class ImageRGBA8 : public Image
+	{
+		using Image::Image;
+	};
 
 	ImageRGB8 OpenRGB8(const std::string& filepath);
 	ImageRGBA8 OpenRGBA8(const std::string& filepath);
