@@ -33,12 +33,12 @@ namespace pngimp
 		m_srgb_val = info.srgb_val;
 	}
 
-	int Image::width()
+	unsigned int Image::width()
 	{
 		return m_width;
 	}
 
-	int Image::height()
+	unsigned int Image::height()
 	{
 		return m_height;
 	}

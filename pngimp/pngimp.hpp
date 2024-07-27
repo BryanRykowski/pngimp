@@ -106,8 +106,8 @@ namespace pngimp
 	{
 	private:
 		SmartBuffer m_data;
-		int m_width = 0;
-		int m_height = 0;
+		unsigned int m_width = 0;
+		unsigned int m_height = 0;
 		unsigned int m_gamma_val = 0;
 		bool m_srgb = false;
 		bool m_gamma = false;
@@ -115,8 +115,8 @@ namespace pngimp
 	public:
 		Image(SmartBuffer data, const ImageInfo& info);
 		Image();
-		int width();
-		int height();
+		unsigned int width();
+		unsigned int height();
 		unsigned int gamma_val();
 		bool gamma();
 		ImageInfo::SRGBIntent srgb_val();
