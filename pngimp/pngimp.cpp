@@ -21,22 +21,17 @@
 
 namespace pngimp
 {
-	struct Header
-	{
-		unsigned int width = 0;
-		unsigned int height = 0;
-		unsigned char bit_depth = 0;
-		unsigned char color_type = 0;
-		bool interlaced = false;
-	};
-
 	Image::Image(){}
 
-	Image::Image(std::vector<unsigned char>* data, int width, int height)
+	Image::Image(std::vector<unsigned char>* data, const ImageInfo& info)
 	{
 		m_data.reset(data);
-		m_width = width;
-		m_height = height;
+		m_width = info.width;
+		m_height = info.height;
+		m_gamma = info.gamma;
+		m_gamma_val = info.gamma_val;
+		m_srgb = info.srgb;
+		m_srgb_val = info.srgb_val;
 	}
 
 	int Image::width()
@@ -47,6 +42,25 @@ namespace pngimp
 	int Image::height()
 	{
 		return m_height;
+	}
+	unsigned int Image::gamma_val()
+	{
+		return m_gamma_val;
+	}
+	
+	bool Image::gamma()
+	{
+		return m_gamma;
+	}
+	
+	ImageInfo::SRGBIntent Image::srgb_val()
+	{
+		return m_srgb_val;
+	}
+	
+	bool Image::srgb()
+	{
+		return m_srgb;
 	}
 	
 	size_t Image::size()
@@ -91,7 +105,7 @@ namespace pngimp
 		return i;
 	}
 
-	Header ReadHeader(std::ifstream& stream)
+	ImageInfo ReadHeader(std::ifstream& stream)
 	{
 		char buffer[21];
 
@@ -117,23 +131,23 @@ namespace pngimp
 		if (buffer[18]) throw(MalformedFile(MalformedFile::Cause::BadCompression));
 		if (buffer[19]) throw(MalformedFile(MalformedFile::Cause::BadFilter));
 
-		Header hdr;
-		hdr.width = ReadUint32(&buffer[8]);
-		hdr.height = ReadUint32(&buffer[12]);
-		memcpy(&hdr.bit_depth, &buffer[16], 1);
-		memcpy(&hdr.color_type, &buffer[17], 1);
+		ImageInfo info;
+		info.width = ReadUint32(&buffer[8]);
+		info.height = ReadUint32(&buffer[12]);
+		memcpy(&info.bit_depth, &buffer[16], 1);
+		memcpy(&info.color_type, &buffer[17], 1);
 
 		// 0 is not a valid PNG width or height.
 
-		if (hdr.width ==  0 || hdr.height == 0) throw(MalformedFile(MalformedFile::Cause::BadDimension));
+		if (info.width ==  0 || info.height == 0) throw(MalformedFile(MalformedFile::Cause::BadDimension));
 
 		// Make sure the image has a valid combination of color format and bit depth.
 		// This doesn't mean we can open it, just that it's a valid PNG.
 
-		switch (hdr.color_type)
+		switch (info.color_type)
 		{
 		case 0:
-			switch (hdr.bit_depth)
+			switch (info.bit_depth)
 			{
 			case 1:
 			case 2:
@@ -148,7 +162,7 @@ namespace pngimp
 		case 2:
 		case 4:
 		case 6:
-			switch (hdr.bit_depth)
+			switch (info.bit_depth)
 			{
 			case 8:
 			case 16:
@@ -158,7 +172,7 @@ namespace pngimp
 			}
 			break;
 		case 3:
-			switch (hdr.bit_depth)
+			switch (info.bit_depth)
 			{
 			case 1:
 			case 2:
@@ -177,11 +191,11 @@ namespace pngimp
 
 		if (buffer[20] == 0)
 		{
-			hdr.interlaced = false;
+			info.interlaced = false;
 		}
 		else if (buffer[20] == 1)
 		{
-			hdr.interlaced = true;
+			info.interlaced = true;
 		}
 		else 
 		{
@@ -190,9 +204,9 @@ namespace pngimp
 
 		// Now that we know it's a valid PNG, reject it if it's not 8 bit RGB or RGBA.
 
-		if (hdr.bit_depth != 8) throw(UnsupportedOption(UnsupportedOption::Cause::BitDepth));
+		if (info.bit_depth != 8) throw(UnsupportedOption(UnsupportedOption::Cause::BitDepth));
 
-		switch (hdr.color_type)
+		switch (info.color_type)
 		{
 		case 2:
 		case 6:
@@ -201,7 +215,7 @@ namespace pngimp
 			throw(UnsupportedOption(UnsupportedOption::Cause::ColorType));
 		}
 
-		return hdr;
+		return info;
 	}
 
 	ImageRGB8 OpenRGB8(const std::string& filepath)

@@ -80,17 +80,45 @@ namespace pngimp
 		UnsupportedOption(Cause c) : cause{c} {}
 	};
 
+	struct ImageInfo
+	{
+		unsigned int width = 0;
+		unsigned int height = 0;
+		unsigned char bit_depth = 0;
+		unsigned char color_type = 0;
+		bool interlaced = false;
+		unsigned int gamma_val = 0;
+		bool srgb = false;
+		bool gamma = false;
+		
+		enum class SRGBIntent
+		{
+			Perceptual,
+			Relative,
+			Saturation,
+			Absolute
+		} srgb_val;
+	};
+
 	class Image
 	{
 	private:
+		std::unique_ptr<std::vector<unsigned char>> m_data;
 		int m_width = 0;
 		int m_height = 0;
-		std::unique_ptr<std::vector<unsigned char>> m_data;
+		unsigned int m_gamma_val = 0;
+		bool m_srgb = false;
+		bool m_gamma = false;
+		ImageInfo::SRGBIntent m_srgb_val;
 	public:
-		Image(std::vector<unsigned char>* data, int width, int height);
+		Image(std::vector<unsigned char>* data, const ImageInfo& info);
 		Image();
 		int width();
 		int height();
+		unsigned int gamma_val();
+		bool gamma();
+		ImageInfo::SRGBIntent srgb_val();
+		bool srgb();
 		size_t size();
 		unsigned char* data();
 	};
