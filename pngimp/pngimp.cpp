@@ -217,6 +217,123 @@ namespace pngimp
 		return info;
 	}
 
+	SmartBuffer ReadChunks(ImageInfo& info, std::ifstream& stream)
+	{
+		SmartBuffer outbuffer = std::make_unique<std::vector<char>>();
+		char chunkhdr[8];	
+		unsigned int length = 0;
+		unsigned int offset = 0;
+
+		while (true)
+		{
+			try
+			{
+				stream.read(chunkhdr, 8);
+			}
+			catch (...)
+			{
+				throw(StreamFail(StreamFail::Cause::ReadFail));
+			}
+
+			length = ReadUint32(chunkhdr);
+
+			if (memcmp(&chunkhdr[4], "IEND", 4) == 0)
+			{
+				break;
+			}
+			else if (memcmp(&chunkhdr[4], "IDAT", 4) == 0)
+			{
+				// Concatenate compressed image data to buffer.
+
+				outbuffer->resize(outbuffer->size() + length);
+
+				try
+				{
+					stream.read(reinterpret_cast<char*>(outbuffer->data() + offset), length);
+				}
+				catch (...)
+				{
+					throw(StreamFail(StreamFail::Cause::ReadFail));
+				}
+
+				offset = outbuffer->size();
+			}
+			else if (memcmp(&chunkhdr[4], "gAMA", 4) == 0)
+			{
+				if (length != 4) throw(MalformedFile(MalformedFile::Cause::BadChunkSize));
+				info.gamma = true;
+				char gamma_buffer[4];
+				
+				try
+				{
+					stream.read(gamma_buffer, 4);
+				}
+				catch (...)
+				{
+					throw(StreamFail(StreamFail::Cause::ReadFail));
+				}
+
+				info.gamma_val = ReadUint32(gamma_buffer);
+			}
+			else if (memcmp(&chunkhdr[4], "sRGB", 4) == 0)
+			{
+				if (length != 4) throw(MalformedFile(MalformedFile::Cause::BadChunkSize));
+				info.srgb = true;
+				char srgb_buffer[4];
+				
+				try
+				{
+					stream.read(srgb_buffer, 4);
+				}
+				catch (...)
+				{
+					throw(StreamFail(StreamFail::Cause::ReadFail));
+				}
+
+				switch (ReadUint32(srgb_buffer))
+				{
+				case 0:
+					info.srgb_val = ImageInfo::SRGBIntent::Perceptual;
+					break;
+				case 1:
+					info.srgb_val = ImageInfo::SRGBIntent::Relative;
+					break;
+				case 2:
+					info.srgb_val = ImageInfo::SRGBIntent::Saturation;
+					break;
+				case 3:
+					info.srgb_val = ImageInfo::SRGBIntent::Absolute;
+				}
+			}
+			else
+			{
+				// Ignore all other blocks.
+
+				try
+				{
+					stream.ignore(length);
+				}
+				catch (...)
+				{
+					throw(StreamFail(StreamFail::Cause::ReadFail));
+				}
+			}
+
+			// Skip CRC for now.
+
+			try
+			{
+				stream.ignore(4);
+			}
+			catch (...)
+			{
+				throw(StreamFail(StreamFail::Cause::ReadFail));
+			}
+		}
+
+		return outbuffer;
+	}
+
 	ImageRGB8 OpenRGB8(const std::string& filepath)
 	{
 		return ImageRGB8();
