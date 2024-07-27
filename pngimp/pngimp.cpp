@@ -106,11 +106,11 @@ namespace pngimp
 
 	ImageInfo ReadHeader(std::ifstream& stream)
 	{
-		char buffer[21];
+		char buffer[25];
 
 		try
 		{
-			stream.read(buffer, 21);
+			stream.read(buffer, 25);
 		}
 		catch(...)
 		{
