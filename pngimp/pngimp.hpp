@@ -35,7 +35,8 @@ namespace pngimp
 			BadColorType,		// Invalid color type (not 1,2,4,8,16)
 			BadCompression,		// Compression is not 0
 			BadFilter,			// Filter is not 0
-			BadInterlace		// Interlace is not 0 or 1
+			BadInterlace,		// Interlace is not 0 or 1
+			BadChunkSize		// A gAMA or sRGB chunk is the wrong size
 		} cause;
 
 		virtual const char* what()
@@ -88,7 +89,7 @@ namespace pngimp
 		unsigned int height = 0;
 		unsigned char bit_depth = 0;
 		unsigned char color_type = 0;
-		bool interlaced = false;
+		unsigned char interlaced = 0;
 		unsigned int gamma_val = 0;
 		bool srgb = false;
 		bool gamma = false;

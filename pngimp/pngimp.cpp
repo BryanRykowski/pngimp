@@ -135,7 +135,13 @@ namespace pngimp
 		info.height = ReadUint32(&buffer[12]);
 		memcpy(&info.bit_depth, &buffer[16], 1);
 		memcpy(&info.color_type, &buffer[17], 1);
+		memcpy(&info.interlaced, &buffer[20], 1);
 
+		return info;
+	}
+
+	void ValidateInfo(const ImageInfo& info)
+	{
 		// 0 is not a valid PNG width or height.
 
 		if (info.width ==  0 || info.height == 0) throw(MalformedFile(MalformedFile::Cause::BadDimension));
@@ -186,21 +192,6 @@ namespace pngimp
 			throw(MalformedFile(MalformedFile::Cause::BadColorType));
 		}
 
-		// Valid interlace values are 0 (not interlaced) and 1 (Adam-7).
-
-		if (buffer[20] == 0)
-		{
-			info.interlaced = false;
-		}
-		else if (buffer[20] == 1)
-		{
-			info.interlaced = true;
-		}
-		else 
-		{
-			throw(MalformedFile(MalformedFile::Cause::BadInterlace));
-		}
-
 		// Now that we know it's a valid PNG, reject it if it's not 8 bit RGB or RGBA.
 
 		if (info.bit_depth != 8) throw(UnsupportedOption(UnsupportedOption::Cause::BitDepth));
@@ -214,7 +205,16 @@ namespace pngimp
 			throw(UnsupportedOption(UnsupportedOption::Cause::ColorType));
 		}
 
-		return info;
+		// Valid interlace values are 0 (not interlaced) and 1 (Adam-7).
+
+		switch (info.interlaced)
+		{
+		case 0:
+		case 1:
+			break;
+		default:
+			throw(MalformedFile(MalformedFile::Cause::BadInterlace));
+		}
 	}
 
 	SmartBuffer ReadChunks(ImageInfo& info, std::ifstream& stream)
