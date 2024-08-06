@@ -36,7 +36,8 @@ namespace pngimp
 			BadCompression,		// Compression is not 0
 			BadFilter,			// Filter is not 0
 			BadInterlace,		// Interlace is not 0 or 1
-			BadChunkSize		// A gAMA or sRGB chunk is the wrong size
+			BadChunkSize,		// A gAMA or sRGB chunk is the wrong size
+			BadZlibStream		// The Zlib stream was corrupt
 		} cause;
 
 		virtual const char* what()
@@ -53,7 +54,8 @@ namespace pngimp
 		enum class Cause
 		{
 			OpenFail,			// The file does not exist or permissions are wrong
-			ReadFail			// The file stopped being available or ended unexpectedly
+			ReadFail,			// The file stopped being available or ended unexpectedly
+			ZlibInit			// The Zlib inflateInit() call failed
 		} cause;
 
 		virtual const char* what()
@@ -136,6 +138,8 @@ namespace pngimp
 		using Image::Image;
 	};
 
+	unsigned int ReadUint32(char* data);
+	void InflateData(SmartBuffer& from, SmartBuffer& to);
 	ImageRGB8 OpenRGB8(const std::string& filepath);
 	ImageRGBA8 OpenRGBA8(const std::string& filepath);
 }
