@@ -1,6 +1,6 @@
 .vs
 .vscode
-.clang
+.clangd
 .cache
 [Bb]uild
 [Rr]elease
