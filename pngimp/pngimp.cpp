@@ -73,6 +73,12 @@ namespace pngimp
 
 		ImageInfo info;
 		ReadHeader(info, stream);
+
+		if ((info.color_type != 2) && (info.color_type != 6)) throw (UnsupportedFormat());
+		if (info.bit_depth != 8) throw (UnsupportedFormat());
+
+		m_width = info.width;
+		m_height = info.height;
 	}
 
 	int Image::width()

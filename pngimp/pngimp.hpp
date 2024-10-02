@@ -36,6 +36,14 @@ namespace pngimp
 		}
 	};
 
+	class UnsupportedFormat : PngimpException
+	{
+		virtual const char* what()
+		{
+			return "unsupported color type or bit depth";
+		}
+	};
+
 	class Image
 	{
 		std::vector<unsigned char> m_data;
