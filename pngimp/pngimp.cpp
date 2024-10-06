@@ -56,6 +56,52 @@ void ReadHeader(ImageInfo& info, std::ifstream& stream)
 	info.interlaced = static_cast<uint_least8_t>(buffer[28]);
 }
 
+void ReadChunks(ImageInfo& info, std::ifstream& stream, std::vector<char>& buffer)
+{
+	buffer.clear();
+	stream.exceptions(std::ios::failbit);
+
+	char chunkheader[8];
+
+	while (!stream.eof())
+	{
+		stream.read(chunkheader, 8);
+
+		if (std::memcmp(&chunkheader[4], "IEND", 4) == 0)
+		{
+			break;
+		}
+		else if (std::memcmp(&chunkheader[4], "IDAT", 4) == 0)
+		{
+			uint_least32_t chunksize = ReadU32(chunkheader);
+			size_t offset = buffer.size();
+			buffer.resize(buffer.size() + chunksize);
+			stream.read(&buffer[offset], chunksize);
+		}
+		else if (std::memcmp(&chunkheader[4], "gAMA", 4) == 0)
+		{
+			char gamma[4];
+			stream.read(gamma, 4);
+			info.gamma_val = ReadU32(gamma);
+			info.gamma = true;
+		}
+		else if (std::memcmp(&chunkheader[4], "sRGB", 4) == 0)
+		{
+			char intent;
+			stream.read(&intent, 1);
+			info.srgb_intent = static_cast<uint_least8_t>(intent);
+			info.srgb = true;
+		}
+		else
+		{
+			// Ignore all other chunks.
+			stream.ignore(ReadU32(chunkheader));
+		}
+
+		stream.ignore(4); // Ignore CRC for now.
+	}
+}
+
 namespace pngimp
 {
 	Image::Image() {}
@@ -79,6 +125,9 @@ namespace pngimp
 
 		m_width = info.width;
 		m_height = info.height;
+
+		std::vector<char> deflated_data;
+		ReadChunks(info, stream, deflated_data);
 	}
 
 	int Image::width()
