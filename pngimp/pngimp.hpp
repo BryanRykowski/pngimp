@@ -44,6 +44,22 @@ namespace pngimp
 		}
 	};
 
+	class ZFail : PngimpException
+	{
+		virtual const char* what()
+		{
+			return "zlib inflate operation failed";
+		}
+	};
+
+	class CorruptFile : PngimpException
+	{
+		virtual const char* what()
+		{
+			return "a value was wrong or a checksum did not match";
+		}
+	};
+
 	class Image
 	{
 		std::vector<unsigned char> m_data;

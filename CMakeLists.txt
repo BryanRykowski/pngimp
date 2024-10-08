@@ -4,6 +4,7 @@ include_directories(${PROJECT_SOURCE_DIR}/pngimp)
 
 enable_testing()
 add_executable(image_open ${PROJECT_SOURCE_DIR}/tests/image_open.cpp ${PROJECT_SOURCE_DIR}/pngimp/pngimp.cpp)
+target_link_libraries(image_open z)
 
 add_test(
 	NAME test_basn2c08

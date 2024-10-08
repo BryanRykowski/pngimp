@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <fstream>
 #include <cstring>
+#include <zlib.h>
 
 struct ImageInfo
 {
@@ -102,6 +103,62 @@ void ReadChunks(ImageInfo& info, std::ifstream& stream, std::vector<char>& buffe
 	}
 }
 
+void InflateData(std::vector<char>& in, std::vector<char>& out)
+{
+#if defined (PNGIMP_ZCHUNK_SIZE)
+	constexpr size_t zchunksize = PNGIMP_ZCHUNK_SIZE;
+#else
+	constexpr size_t zchunksize = 262144;
+#endif
+
+	out.clear();
+
+	// Get the adler32 appended to the end of the Zlib stream.
+	uint_least32_t adler = ReadU32(&in[in.size() - 4]);
+
+	// Initialize the Zlib stream struct.
+	z_stream stream;
+	stream.zalloc = Z_NULL;
+	stream.zfree = Z_NULL;
+	stream.opaque = Z_NULL;
+	int ret = inflateInit(&stream);
+	if (ret != Z_OK) throw (pngimp::ZFail());
+
+	// Set Zlib to read from the input buffer.
+	stream.avail_in = in.size();
+	stream.next_in = (unsigned char*)in.data();
+
+	do
+	{
+		// Decompress the input buffer, writing [zchunksize] bytes to the output buffer at a time.
+		size_t size = out.size();
+		out.resize(out.size() + zchunksize);
+		stream.next_out = (unsigned char*)&out[size];
+		stream.avail_out = zchunksize;
+		ret = inflate(&stream, Z_NO_FLUSH);
+
+		if (ret == Z_STREAM_END)
+		{
+			break;
+		}
+		else if (ret != Z_OK)
+		{
+			inflateEnd(&stream);
+			throw (pngimp::ZFail());
+		}
+	}
+	while (stream.avail_out == 0);
+
+	// Make sure the adler32 of the inflated data matches the value appended to the stream.
+	if (stream.adler != adler) throw (pngimp::CorruptFile());
+
+	// Shrink the output buffer to the actual data written to it.
+	out.resize(stream.total_out);
+	
+	// Clean up the Zlib state.
+	inflateEnd(&stream);
+}
+
 namespace pngimp
 {
 	Image::Image() {}
@@ -126,8 +183,10 @@ namespace pngimp
 		m_width = info.width;
 		m_height = info.height;
 
-		std::vector<char> deflated_data;
-		ReadChunks(info, stream, deflated_data);
+		std::vector<char> buffer_a;
+		ReadChunks(info, stream, buffer_a);
+		std::vector<char> buffer_b;
+		InflateData(buffer_a, buffer_b);
 	}
 
 	int Image::width()
